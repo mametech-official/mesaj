@@ -1500,11 +1500,11 @@
   align-items: center;
   justify-content: space-between;
   gap: 8px;
-  background: rgba(0, 0, 0, 0.28);
+  background: rgba(0, 0, 0, 0.32);
   border: 1px solid rgba(255, 255, 255, 0.08);
-  border-radius: 10px;
+  border-radius: 12px;
   padding: 6px 10px;
-  margin: 7px 0 5px 0;
+  margin: 7px 0 6px 0;
 }
 .rc-xox-player {
   display: flex;
@@ -1513,8 +1513,8 @@
   font-size: 11.5px;
   color: var(--text-sub);
   padding: 4px 8px;
-  border-radius: 6px;
-  background: rgba(255, 255, 255, 0.03);
+  border-radius: 7px;
+  background: rgba(255, 255, 255, 0.04);
   transition: all 0.2s ease;
   min-width: 0;
 }
@@ -1528,6 +1528,19 @@
 .rc-xox-player.is-me {
   outline: 1px dashed rgba(255, 255, 255, 0.3);
 }
+.rc-xox-score {
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  min-width: 20px;
+  height: 20px;
+  padding: 0 5px;
+  border-radius: 99px;
+  background: rgba(255, 255, 255, 0.16);
+  color: #fff;
+  font-weight: 800;
+  font-size: 11px;
+}
 .rc-xox-sym {
   font-weight: 900;
   font-size: 13.5px;
@@ -1535,16 +1548,41 @@
 .rc-xox-sym.x { color: #00e5b3; }
 .rc-xox-sym.o { color: #38bdf8; }
 .rc-xox-vs {
-  font-size: 10px;
+  display: flex;
+  flex-direction: column;
+  align-items: center;
+  gap: 1px;
+  flex-shrink: 0;
+}
+.rc-xox-vs-label {
+  font-size: 8.5px;
   font-weight: 900;
-  color: var(--text-muted);
+  color: var(--text-dim);
+  letter-spacing: 1px;
+}
+.rc-xox-vs-score {
+  font-size: 13px;
+  font-weight: 900;
+  color: var(--accent-bright);
+  font-family: monospace;
+  background: rgba(0, 229, 179, 0.12);
+  border: 1px solid rgba(0, 229, 179, 0.3);
+  padding: 1px 7px;
+  border-radius: 6px;
   letter-spacing: 1px;
 }
 .rc-xox-name {
-  max-width: 80px;
+  max-width: 75px;
   overflow: hidden;
   text-overflow: ellipsis;
   white-space: nowrap;
+}
+.rc-xox-actions {
+  display: flex;
+  align-items: center;
+  gap: 8px;
+  margin-top: 8px;
+  flex-wrap: wrap;
 }
 
 .rc-xox-grid {
@@ -1574,6 +1612,16 @@
 }
 .rc-xox-cell.val-X { color: #00e5b3; }
 .rc-xox-cell.val-O { color: #38bdf8; }
+.rc-xox-cell.winning-cell {
+  background: rgba(0, 229, 179, 0.28) !important;
+  border-color: #00e5b3 !important;
+  box-shadow: 0 0 14px rgba(0, 229, 179, 0.6);
+  animation: pulseWin 1.2s infinite alternate;
+}
+@keyframes pulseWin {
+  from { transform: scale(1); filter: brightness(1); }
+  to { transform: scale(1.05); filter: brightness(1.3); }
+}
 .rc-rps-btns { display: flex; gap: 6px; margin-top: 8px; flex-wrap: wrap; }
 .rc-dice-row { display: flex; gap: 12px; justify-content: center; font-size: 44px; line-height: 1; margin: 6px 0; }
 

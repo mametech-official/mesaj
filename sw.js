@@ -1,5 +1,5 @@
 // sw.js — Mesaj PWA Servis Çalışanı (v5 Network-First)
-const CACHE_NAME = 'mesaj-cache-v22';
+const CACHE_NAME = 'mesaj-cache-v23';
 const ASSETS = [
   './',
   './index.html',

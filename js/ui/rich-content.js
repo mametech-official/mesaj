@@ -387,7 +387,9 @@ function buildGameWidget(game, meUsername, onSave, m, meId) {
   card.append(xoxBadge);
 
   const board = game.board || Array(9).fill('');
-  const winner = game.winner || checkXoxWinner(board);
+  const winCheck = checkXoxWinner(board);
+  const winner = game.winner || (winCheck ? winCheck.winner : null);
+  const winningLine = (winCheck && winCheck.winner !== 'Berabere') ? (winCheck.line || []) : [];
 
   // Oyuncu rollerinin belirlenmesi: X (başlatan) ve O (ikinci oyuncu)
   const playerX = game.playerX || game.starter || (m && m.sender_id === meId ? meUsername : null);
@@ -403,10 +405,15 @@ function buildGameWidget(game, meUsername, onSave, m, meId) {
     mySymbol = 'O';
   }
 
+  // Skor takibi (X ve O galibiyet sayıları)
+  const score = game.score || {};
+  let scoreX = typeof score.X === 'number' ? score.X : (winner === 'X' ? 1 : 0);
+  let scoreO = typeof score.O === 'number' ? score.O : (winner === 'O' ? 1 : 0);
+
   const currentTurn = game.turn || 'X';
   const isMyTurn = !winner && !!mySymbol && (currentTurn === mySymbol);
 
-  // 1. Oyuncular ve Roller Başlığı
+  // 1. Oyuncular, Roller ve Canlı Skor Tablosu
   const p1Name = playerX || 'Oyuncu 1';
   const p2Name = playerO || (mySymbol === 'O' ? meUsername : 'Oyuncu 2');
 
@@ -415,35 +422,39 @@ function buildGameWidget(game, meUsername, onSave, m, meId) {
     <div class="rc-xox-player ${currentTurn === 'X' && !winner ? 'turn-active' : ''} ${mySymbol === 'X' ? 'is-me' : ''}">
       <span class="rc-xox-sym x">X</span>
       <span class="rc-xox-name">${escapeHtml(p1Name)}${mySymbol === 'X' ? ' (Sen)' : ''}</span>
+      <span class="rc-xox-score" title="Galibiyet">${scoreX}</span>
     </div>
-    <div class="rc-xox-vs">VS</div>
+    <div class="rc-xox-vs">
+      <span class="rc-xox-vs-label">SKOR</span>
+      <span class="rc-xox-vs-score">${scoreX} - ${scoreO}</span>
+    </div>
     <div class="rc-xox-player ${currentTurn === 'O' && !winner ? 'turn-active' : ''} ${mySymbol === 'O' ? 'is-me' : ''}">
+      <span class="rc-xox-score" title="Galibiyet">${scoreO}</span>
       <span class="rc-xox-sym o">O</span>
       <span class="rc-xox-name">${escapeHtml(p2Name)}${mySymbol === 'O' ? ' (Sen)' : ''}</span>
     </div>
   `;
   card.append(playersRow);
 
-  // 2. Durum / Sıra Bildirimi
+  // 2. Durum / Kazanan ve Skor Bildirimi
   let statusText = '';
   if (winner) {
     if (winner === 'Berabere') {
-      statusText = '🤝 Oyun Berabere Bitti!';
-    } else if (mySymbol && winner === mySymbol) {
-      statusText = '🏆 Tebrikler, Kazandın!';
+      statusText = `🤝 Oyun Berabere Bitti! • Skor: ${scoreX} - ${scoreO}`;
     } else {
       const winnerName = winner === 'X' ? p1Name : p2Name;
-      statusText = `👑 Kazanan: @${winnerName || winner}!`;
+      const winnerTag = (mySymbol === winner) ? ' (Sen Kazandın! 🏆)' : ' Kazandı! 👑';
+      statusText = `🏆 Kazanan: @${winnerName}${winnerTag} (${winner}) • Skor: ${scoreX} - ${scoreO}`;
     }
   } else {
     if (!mySymbol) {
       const activeUser = currentTurn === 'X' ? p1Name : p2Name;
-      statusText = `İzleyici Modu • Sıra: @${activeUser} (${currentTurn})`;
+      statusText = `İzleyici Modu • Sıra: @${activeUser} (${currentTurn}) • Skor: ${scoreX} - ${scoreO}`;
     } else if (isMyTurn) {
-      statusText = `🟢 Sıra Sende! (${mySymbol} hamleni yap)`;
+      statusText = `🟢 Sıra Sende! (${mySymbol} hamleni yap) • Skor: ${scoreX} - ${scoreO}`;
     } else {
       const waitUser = currentTurn === 'X' ? p1Name : p2Name;
-      statusText = `⏳ Sıra Rakipte (@${waitUser} bekleniyor...)`;
+      statusText = `⏳ Sıra Rakipte (@${waitUser} bekleniyor...) • Skor: ${scoreX} - ${scoreO}`;
     }
   }
 
@@ -454,7 +465,8 @@ function buildGameWidget(game, meUsername, onSave, m, meId) {
   // 3. Oyun Alanı (3x3 Grid)
   const grid = el('div', 'rc-xox-grid');
   board.forEach((cell, i) => {
-    const b = el('button', 'rc-xox-cell' + (cell ? ` val-${cell}` : ''));
+    const isWinningCell = winningLine.includes(i);
+    const b = el('button', 'rc-xox-cell' + (cell ? ` val-${cell}` : '') + (isWinningCell ? ' winning-cell' : ''));
     b.type = 'button';
     b.textContent = cell || '';
 
@@ -487,10 +499,14 @@ function buildGameWidget(game, meUsername, onSave, m, meId) {
 
       const nextWin = checkXoxWinner(next.board);
       if (nextWin) {
-        next.winner = nextWin;
+        next.winner = nextWin.winner;
         next.turn = null;
+        const newScoreX = scoreX + (nextWin.winner === 'X' ? 1 : 0);
+        const newScoreO = scoreO + (nextWin.winner === 'O' ? 1 : 0);
+        next.score = { X: newScoreX, O: newScoreO };
       } else {
         next.turn = mySymbol === 'X' ? 'O' : 'X';
+        next.score = { X: scoreX, O: scoreO };
       }
       onSave(next);
     });
@@ -498,12 +514,13 @@ function buildGameWidget(game, meUsername, onSave, m, meId) {
   });
   card.append(grid);
 
-  // 4. Yeniden Oyna Butonu
+  // 4. Yeniden Oyna / Skor Sıfırla Butonları
   if (winner) {
+    const actRow = el('div', 'rc-xox-actions');
+
     const resetBtn = el('button', 'btn-sm secondary');
-    resetBtn.innerHTML = `${icon('rotate')} Yeniden Oyna`;
+    resetBtn.innerHTML = `${icon('rotate')} Sonraki Tur (Skor Korunur)`;
     resetBtn.type = 'button';
-    resetBtn.style.marginTop = '8px';
     resetBtn.addEventListener('click', (e) => {
       e.stopPropagation();
       onSave({
@@ -514,9 +531,31 @@ function buildGameWidget(game, meUsername, onSave, m, meId) {
         playerX: playerX || meUsername,
         playerO: playerO || null,
         winner: null,
+        score: { X: scoreX, O: scoreO },
       });
     });
-    card.append(resetBtn);
+
+    const clearScoreBtn = el('button', 'btn-sm text');
+    clearScoreBtn.innerHTML = `Skoru Sıfırla (0 - 0)`;
+    clearScoreBtn.type = 'button';
+    clearScoreBtn.style.fontSize = '11px';
+    clearScoreBtn.style.opacity = '0.75';
+    clearScoreBtn.addEventListener('click', (e) => {
+      e.stopPropagation();
+      onSave({
+        type: 'xox',
+        board: Array(9).fill(''),
+        turn: 'X',
+        starter: meUsername,
+        playerX: playerX || meUsername,
+        playerO: playerO || null,
+        winner: null,
+        score: { X: 0, O: 0 },
+      });
+    });
+
+    actRow.append(resetBtn, clearScoreBtn);
+    card.append(actRow);
   }
   return card;
 }
@@ -528,9 +567,9 @@ function checkXoxWinner(b) {
     [0,4,8],[2,4,6],
   ];
   for (const [a, c, d] of lines) {
-    if (b[a] && b[a] === b[c] && b[a] === b[d]) return b[a];
+    if (b[a] && b[a] === b[c] && b[a] === b[d]) return { winner: b[a], line: [a, c, d] };
   }
-  if (b.every(Boolean)) return 'Berabere';
+  if (b.every(Boolean)) return { winner: 'Berabere', line: [] };
   return null;
 }
 
