@@ -1,4 +1,5 @@
 node_modules/
+dist-repos/
 .DS_Store
 Thumbs.db
 *.log
