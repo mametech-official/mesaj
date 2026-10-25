@@ -1468,6 +1468,58 @@
 }
 .rc-todo-item input { accent-color: var(--accent-bright); width: 15px; height: 15px; }
 
+.rc-xox-players {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: 8px;
+  background: rgba(0, 0, 0, 0.28);
+  border: 1px solid rgba(255, 255, 255, 0.08);
+  border-radius: 10px;
+  padding: 6px 10px;
+  margin: 7px 0 5px 0;
+}
+.rc-xox-player {
+  display: flex;
+  align-items: center;
+  gap: 6px;
+  font-size: 11.5px;
+  color: var(--text-sub);
+  padding: 4px 8px;
+  border-radius: 6px;
+  background: rgba(255, 255, 255, 0.03);
+  transition: all 0.2s ease;
+  min-width: 0;
+}
+.rc-xox-player.turn-active {
+  background: rgba(0, 229, 179, 0.16);
+  color: #fff;
+  font-weight: 700;
+  box-shadow: 0 0 10px rgba(0, 229, 179, 0.28);
+  border: 1px solid rgba(0, 229, 179, 0.35);
+}
+.rc-xox-player.is-me {
+  outline: 1px dashed rgba(255, 255, 255, 0.3);
+}
+.rc-xox-sym {
+  font-weight: 900;
+  font-size: 13.5px;
+}
+.rc-xox-sym.x { color: #00e5b3; }
+.rc-xox-sym.o { color: #38bdf8; }
+.rc-xox-vs {
+  font-size: 10px;
+  font-weight: 900;
+  color: var(--text-muted);
+  letter-spacing: 1px;
+}
+.rc-xox-name {
+  max-width: 80px;
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+}
+
 .rc-xox-grid {
   display: grid;
   grid-template-columns: repeat(3, 1fr);
@@ -1482,6 +1534,16 @@
   font-size: 20px;
   font-weight: 800;
   color: #fff;
+  transition: transform 0.12s, background 0.12s;
+}
+.rc-xox-cell:disabled {
+  opacity: 0.6;
+  cursor: not-allowed;
+}
+.rc-xox-cell:not(:disabled):hover {
+  background: rgba(255, 255, 255, 0.16);
+  border-color: var(--accent-bright);
+  transform: scale(1.02);
 }
 .rc-xox-cell.val-X { color: #00e5b3; }
 .rc-xox-cell.val-O { color: #38bdf8; }

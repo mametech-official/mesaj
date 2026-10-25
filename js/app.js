@@ -17,7 +17,7 @@ import { initWallpaperPicker, openWallpaperPicker } from './ui/wallpaper-picker.
 import { initProfileModal, openProfileModal } from './ui/profile-modal.js';
 import { initLiveBackgrounds } from './ui/canvas-bg.js';
 import { initClickRipples, init3DParallaxCards, initPrivacyShield, updateFaviconBadge } from './ui/fx.js';
-import { initLiveCollab } from './ui/live-collab.js';
+import { initLiveCollab, stopLiveCollab } from './ui/live-collab.js';
 import { initCommandPalette, openCommandPalette, renderStoriesBar } from './ui/command-palette.js';
 import { requestNotificationPermission } from './services/notifications.js';
 import { initAuthView, resetAuthView } from './ui/auth-view.js';
@@ -69,6 +69,7 @@ function updateMeAvatarUI() {
 
 function stopApp() {
   starting = null;
+  stopLiveCollab();
   stopMessageRealtime();
   stopPresence();
   resetChatView();

@@ -26,7 +26,7 @@ import { initChatSearch, resetChatSearch } from './chat-search.js';
 import { openWallpaperPicker } from './wallpaper-picker.js';
 import { getSmartReplies } from './rich-content.js';
 import { openMediaGalleryModal } from './media-studio.js';
-import { startCall, sendNudgeBroadcast, openWhiteboardModal } from './live-collab.js';
+import { startCall, sendNudgeBroadcast, openWhiteboardModal, sendCollabBroadcast } from './live-collab.js';
 import { openChatAnalyticsModal } from './command-palette.js';
 import { playFxSound, checkAndTriggerCelebration, toggleZenMode } from './fx.js';
 import { icon } from './icons.js';
@@ -128,6 +128,13 @@ export function initChatView() {
   // Realtime dinleyicileri
   bus.on('message:insert', onRealtimeInsert);
   bus.on('message:update', onRealtimeUpdate);
+  bus.on('message:widget-update', ({ messageId, content }) => {
+    const target = loaded.find(m => m.id === messageId);
+    if (target) {
+      target.content = content;
+      renderAll();
+    }
+  });
   bus.on('reaction:change', onRealtimeReaction);
   bus.on('star:change', onRealtimeStar);
   bus.on('presence:change', updateHeader);
@@ -727,15 +734,29 @@ function createMessageElement(m, prev, animate) {
     onPin: (msg) => pinMessage(msg),
     onUpdateRichWidget: async (msg, newContent) => {
       msg.content = newContent;
+      renderAll();
       if (state.activeChat?.isSelf) {
         saveSelfNotes();
-        renderAll();
         return;
       }
+      // Odaya canlı broadcast yayınla (karşı taraf anında gecikmesiz güncellensin)
+      sendCollabBroadcast('widget-update', {
+        messageId: msg.id,
+        content: newContent,
+        from: state.me?.username,
+      });
+
+      // Veritabanına kaydet
       try {
         await editMessage(msg.id, newContent);
-      } catch {}
-      renderAll();
+      } catch (err) {
+        // Alıcı RLS engeline takılırsa mesaj sahibinden DB'ye yazmasını iste
+        sendCollabBroadcast('widget-persist-request', {
+          messageId: msg.id,
+          content: newContent,
+          senderId: msg.sender_id,
+        });
+      }
     },
     onDelete: async (msg) => {
       if (state.activeChat?.isSelf) {

@@ -9,6 +9,7 @@ import { playFxSound, triggerScreenShake } from './fx.js';
 import { icon } from './icons.js';
 import { toast } from './toast.js';
 import { mergeStories, deleteStoryLocally, getStories } from '../services/stories.js';
+import { editMessage } from '../services/messages.js';
 
 let collabChannel = null;
 let pc = null;
@@ -18,6 +19,11 @@ let callTimerInt = null;
 let callSeconds = 0;
 let pendingIceCandidates = [];
 let virtualCamInterval = null;
+let ringSoundInterval = null;
+let callOfferHeartbeat = null;
+let callTimeoutTimer = null;
+let isCallConnected = false;
+let currentCallType = null;
 
 const ICE_SERVERS = {
   iceServers: [
@@ -25,6 +31,44 @@ const ICE_SERVERS = {
     { urls: 'stun:stun1.l.google.com:19302' },
   ],
 };
+
+/**
+ * Collab kanalının hazır olmasını bekler ve güvenli şekilde broadcast gönderir.
+ */
+export async function sendCollabBroadcast(event, payload) {
+  if (!collabChannel) initLiveCollab();
+  if (collabChannel && collabChannel.state !== 'joined') {
+    await new Promise((resolve) => {
+      let waited = 0;
+      const chk = setInterval(() => {
+        waited += 100;
+        if (collabChannel?.state === 'joined' || waited >= 2500) {
+          clearInterval(chk);
+          resolve();
+        }
+      }, 100);
+    });
+  }
+  try {
+    return await collabChannel?.send({
+      type: 'broadcast',
+      event,
+      payload,
+    });
+  } catch (err) {
+    console.warn('sendCollabBroadcast hatası:', event, err);
+  }
+}
+
+export function stopLiveCollab() {
+  endCall(false);
+  if (collabChannel) {
+    try {
+      sb.removeChannel(collabChannel);
+    } catch {}
+    collabChannel = null;
+  }
+}
 
 export function initLiveCollab() {
   if (collabChannel) return;
@@ -50,13 +94,34 @@ export function initLiveCollab() {
       if (!state.me || payload?.to !== state.me.id) return;
       await onIncomingCallOffer(payload);
     })
+    .on('broadcast', { event: 'call-ringing' }, ({ payload }) => {
+      if (!state.me || payload?.to !== state.me.id) return;
+      if (!isCallConnected) {
+        setCallStatus('Çalıyor…');
+      }
+    })
     .on('broadcast', { event: 'call-answer' }, async ({ payload }) => {
       if (!state.me || payload?.to !== state.me.id || !pc) return;
       try {
+        clearInterval(ringSoundInterval);
+        clearInterval(callOfferHeartbeat);
+        clearTimeout(callTimeoutTimer);
+        ringSoundInterval = null;
+        callOfferHeartbeat = null;
+        callTimeoutTimer = null;
         await pc.setRemoteDescription(new RTCSessionDescription(payload.sdp));
         await flushPendingIce();
+        isCallConnected = true;
         setCallStatus('Bağlandı • Canlı Görüşme');
-      } catch {}
+        const hangupBtn = $('call-hangup-btn');
+        if (hangupBtn) {
+          hangupBtn.innerHTML = `${icon('phoneHangup')} Bitir`;
+          hangupBtn.onclick = () => endCall(true);
+        }
+        startCallTimer();
+      } catch (err) {
+        console.warn('Call answer SDP hatası:', err);
+      }
     })
     .on('broadcast', { event: 'call-ice' }, async ({ payload }) => {
       if (!state.me || payload?.to !== state.me.id || !payload.candidate) return;
@@ -68,10 +133,32 @@ export function initLiveCollab() {
         await pc.addIceCandidate(new RTCIceCandidate(payload.candidate));
       } catch {}
     })
+    .on('broadcast', { event: 'call-reject' }, ({ payload }) => {
+      if (!state.me || payload?.to !== state.me.id) return;
+      const rejectedName = callPartner?.username || 'Kullanıcı';
+      endCall(false);
+      toast(`@${rejectedName} aramayı reddetti.`);
+    })
+    .on('broadcast', { event: 'call-busy' }, ({ payload }) => {
+      if (!state.me || payload?.to !== state.me.id) return;
+      const busyName = callPartner?.username || 'Kullanıcı';
+      endCall(false);
+      toast(`@${busyName} şu anda başka bir görüşmede.`);
+    })
     .on('broadcast', { event: 'call-end' }, ({ payload }) => {
       if (!state.me || payload?.to !== state.me.id) return;
       endCall(false);
       toast('Görüşme sonlandırıldı.');
+    })
+    .on('broadcast', { event: 'widget-update' }, ({ payload }) => {
+      if (!payload?.messageId) return;
+      bus.emit('message:widget-update', payload);
+    })
+    .on('broadcast', { event: 'widget-persist-request' }, async ({ payload }) => {
+      if (!state.me || payload?.senderId !== state.me.id) return;
+      try {
+        await editMessage(payload.messageId, payload.content);
+      } catch {}
     })
     .on('broadcast', { event: 'story-new' }, ({ payload }) => {
       if (payload?.story) {
@@ -86,11 +173,7 @@ export function initLiveCollab() {
     .on('broadcast', { event: 'story-request' }, () => {
       const stories = getStories();
       if (stories.length && collabChannel) {
-        collabChannel.send({
-          type: 'broadcast',
-          event: 'story-sync',
-          payload: { stories },
-        });
+        sendCollabBroadcast('story-sync', { stories });
       }
     })
     .on('broadcast', { event: 'story-sync' }, ({ payload }) => {
@@ -101,41 +184,29 @@ export function initLiveCollab() {
     .subscribe((status) => {
       if (status === 'SUBSCRIBED') {
         // Çevrim içi diğer kullanıcılardan mevcut hikayeleri iste
-        collabChannel.send({
-          type: 'broadcast',
-          event: 'story-request',
-          payload: {},
-        });
+        sendCollabBroadcast('story-request', {});
       }
     });
 
   // Yeni hikaye veya silinme durumunda yayın gönder
   bus.on('story:broadcast', (story) => {
-    if (!collabChannel || !story) return;
-    collabChannel.send({
-      type: 'broadcast',
-      event: 'story-new',
-      payload: { story },
-    });
+    if (!story) return;
+    sendCollabBroadcast('story-new', { story });
   });
 
   bus.on('story:broadcast_delete', (storyId) => {
-    if (!collabChannel || !storyId) return;
-    collabChannel.send({
-      type: 'broadcast',
-      event: 'story-delete',
-      payload: { storyId },
-    });
+    if (!storyId) return;
+    sendCollabBroadcast('story-delete', { storyId });
   });
 }
 
 export function sendNudgeBroadcast(targetUserId) {
-  if (!collabChannel || !state.me) return;
+  if (!state.me) return;
   triggerScreenShake();
-  collabChannel.send({
-    type: 'broadcast',
-    event: 'nudge',
-    payload: { to: targetUserId, from: state.me.id, fromName: state.me.username },
+  sendCollabBroadcast('nudge', {
+    to: targetUserId,
+    from: state.me.id,
+    fromName: state.me.username,
   });
 }
 
@@ -294,68 +365,152 @@ function createVirtualVideoTrack(username = 'kullanici') {
   return stream.getVideoTracks()[0];
 }
 
-async function acquireCallStream(withVideo) {
+/**
+ * Fiziksel mikrofon meşgul olduğunda veya bulunamadığında WebRTC bağlantısının
+ * kesilmemesi için düşük seviyeli sessiz Web Audio izi üretir.
+ */
+function createVirtualAudioTrack() {
+  try {
+    const AudioCtx = window.AudioContext || window.webkitAudioContext;
+    if (!AudioCtx) return null;
+    const actx = new AudioCtx();
+    const osc = actx.createOscillator();
+    const dst = actx.createMediaStreamDestination();
+    const gain = actx.createGain();
+    gain.gain.value = 0.001;
+    osc.connect(gain);
+    gain.connect(dst);
+    osc.start();
+    return dst.stream.getAudioTracks()[0] || null;
+  } catch {
+    return null;
+  }
+}
+
+async function acquireCallStream(withVideo = false) {
+  const getVirtualVideo = () => createVirtualVideoTrack(state.me?.username || 'ben');
+  const getVirtualAudio = () => createVirtualAudioTrack();
+
   if (!withVideo) {
-    return await navigator.mediaDevices.getUserMedia({ audio: true, video: false });
+    // Sesli Arama
+    try {
+      return await navigator.mediaDevices.getUserMedia({ audio: true, video: false });
+    } catch (e1) {
+      console.warn('Fiziksel mikrofon alınamadı, sanal ses kullanılıyor:', e1);
+      const vAudio = getVirtualAudio();
+      if (vAudio) {
+        toast('Mikrofon başka sekmede kullanımda; ses bağlantısı sanal modda açıldı.');
+        return new MediaStream([vAudio]);
+      }
+      throw e1;
+    }
   }
 
-  // 1. Önce hem mikrofon hem fiziksel kamerayı dene
+  // Görüntülü Arama:
+  // 1. Önce standart hem mikrofon hem kamerayı basit kısıtlamalarla iste
+  try {
+    return await navigator.mediaDevices.getUserMedia({ audio: true, video: true });
+  } catch (err1) {
+    console.warn('Standart getUserMedia(audio, video) deneniyor:', err1);
+  }
+
+  // 2. Kısıtlamalı dene
   try {
     return await navigator.mediaDevices.getUserMedia({
       audio: true,
       video: { width: { ideal: 640 }, height: { ideal: 480 } },
     });
-  } catch {}
-
-  // 2. Kamera başka tarayıcıda meşgulse veya yoksa: mikrofonu al + sanal video ekle
-  try {
-    const audioOnlyStream = await navigator.mediaDevices.getUserMedia({ audio: true, video: false });
-    const vTrack = createVirtualVideoTrack(state.me?.username || 'ben');
-    if (vTrack) audioOnlyStream.addTrack(vTrack);
-    toast('Kamera başka uygulamada meşgul veya bulunamadı; ses + canlı profil görüntüsü ile bağlanıldı.');
-    return audioOnlyStream;
-  } catch {}
-
-  // 3. Yalnızca kamera erişilebiliyorsa
-  try {
-    return await navigator.mediaDevices.getUserMedia({ audio: false, video: true });
-  } catch (err) {
-    throw err;
+  } catch (err2) {
+    console.warn('Kısıtlamalı getUserMedia deneniyor:', err2);
   }
+
+  // 3. Mikrofon var ama fiziksel kamera meşgul/yoksa: ses + sanal video
+  try {
+    const audioStream = await navigator.mediaDevices.getUserMedia({ audio: true, video: false });
+    const vTrack = getVirtualVideo();
+    if (vTrack) audioStream.addTrack(vTrack);
+    toast('Kamera başka sekmede kullanımda; ses + canlı profil animasyonu ile bağlandı.');
+    return audioStream;
+  } catch (err3) {
+    console.warn('Yalnızca ses alma deneniyor:', err3);
+  }
+
+  // 4. Kamera var ama mikrofon meşgul/yoksa: kamera + sanal ses
+  try {
+    const videoStream = await navigator.mediaDevices.getUserMedia({ audio: false, video: true });
+    const vAudio = getVirtualAudio();
+    if (vAudio) videoStream.addTrack(vAudio);
+    toast('Mikrofon başka sekmede kullanımda; kamera + sanal ses ile bağlandı.');
+    return videoStream;
+  } catch (err4) {
+    console.warn('Yalnızca video alma deneniyor:', err4);
+  }
+
+  // 5. Her iki donanım da meşgul/yoksa: sanal video + sanal ses (test ve eşzamanlı sekme modu)
+  const vTrack = getVirtualVideo();
+  const vAudio = getVirtualAudio();
+  if (vTrack && vAudio) {
+    toast('Kamera ve mikrofon başka sekmede kullanımda; arama test modunda bağlandı.');
+    return new MediaStream([vTrack, vAudio]);
+  }
+
+  throw new Error('Medya aygıtlarına erişilemedi.');
 }
 
 export async function startCall(partner, withVideo = false) {
   if (!partner || !state.me) return;
+  if (partner.id === state.me.id || partner.isSelf) {
+    toast('Kendinizi arayamazsınız.');
+    return;
+  }
+  endCall(false);
   initLiveCollab();
   callPartner = partner;
+  currentCallType = withVideo ? 'video' : 'audio';
+  isCallConnected = false;
   pendingIceCandidates = [];
+
   const modal = ensureCallModal();
   $('call-partner-name').textContent = `@${partner.username}`;
-  $('call-accept-btn').hidden = true;
+  const accBtn = $('call-accept-btn');
+  const hangupBtn = $('call-hangup-btn');
+  accBtn.hidden = true;
+  hangupBtn.innerHTML = `${icon('phoneHangup')} İptal Et`;
+  hangupBtn.onclick = () => endCall(true);
+
   setCallStatus(withVideo ? 'Görüntülü aranıyor…' : 'Sesli aranıyor…');
+  const timerEl = $('call-timer-text');
+  if (timerEl) timerEl.textContent = '';
   modal.classList.add('open');
+
+  clearInterval(ringSoundInterval);
   playFxSound('ring');
+  ringSoundInterval = setInterval(() => playFxSound('ring'), 2500);
 
   try {
     localStream = await acquireCallStream(withVideo);
     const localVid = $('call-local-video');
-    localVid.srcObject = localStream;
-    localVid.play?.().catch(() => {});
+    if (localVid) {
+      localVid.srcObject = localStream;
+      localVid.play?.().catch(() => {});
+    }
 
     pc = new RTCPeerConnection(ICE_SERVERS);
     localStream.getTracks().forEach(t => pc.addTrack(t, localStream));
 
     pc.ontrack = (e) => {
       const remVid = $('call-remote-video');
-      remVid.srcObject = e.streams[0];
-      remVid.play?.().catch(() => {});
+      if (remVid && e.streams && e.streams[0]) {
+        remVid.srcObject = e.streams[0];
+        remVid.play?.().catch(() => {});
+      }
     };
     pc.onicecandidate = (e) => {
-      if (e.candidate && collabChannel) {
-        collabChannel.send({
-          type: 'broadcast',
-          event: 'call-ice',
-          payload: { to: partner.id, from: state.me.id, candidate: e.candidate },
+      if (e.candidate) {
+        sendCollabBroadcast('call-ice', {
+          to: partner.id,
+          from: state.me.id,
+          candidate: e.candidate,
         });
       }
     };
@@ -363,74 +518,143 @@ export async function startCall(partner, withVideo = false) {
     const offer = await pc.createOffer();
     await pc.setLocalDescription(offer);
 
-    collabChannel.send({
-      type: 'broadcast',
-      event: 'call-offer',
-      payload: {
-        to: partner.id,
-        from: state.me.id,
-        fromName: state.me.username,
-        withVideo,
-        sdp: pc.localDescription,
-      },
-    });
-    startCallTimer();
+    const offerPayload = {
+      to: partner.id,
+      from: state.me.id,
+      fromName: state.me.username,
+      withVideo,
+      sdp: pc.localDescription,
+    };
+
+    await sendCollabBroadcast('call-offer', offerPayload);
+
+    // Yanıt gelene kadar her 2 saniyede bir çağrı sinyalini yenile (heartbeat)
+    clearInterval(callOfferHeartbeat);
+    callOfferHeartbeat = setInterval(() => {
+      if (!isCallConnected && callPartner) {
+        sendCollabBroadcast('call-offer', offerPayload);
+      } else {
+        clearInterval(callOfferHeartbeat);
+      }
+    }, 2000);
+
+    // 35 saniye boyunca cevap verilmezse çağrıyı otomatik sonlandır
+    clearTimeout(callTimeoutTimer);
+    callTimeoutTimer = setTimeout(() => {
+      if (!isCallConnected) {
+        toast(`@${partner.username} yanıt vermedi.`);
+        endCall(true);
+      }
+    }, 35000);
   } catch (err) {
-    toast('Mikrofon veya kamera izni alınamadı.');
+    console.error('Arama başlatma hatası:', err);
+    toast('Mikrofon veya kamera açılamadı.');
     endCall(false);
   }
 }
 
 async function onIncomingCallOffer(payload) {
+  if (isCallConnected) {
+    sendCollabBroadcast('call-busy', { to: payload.from, from: state.me.id });
+    return;
+  }
+
+  // Zaten aynı kullanıcı için çağrı ekranı açıksa heartbeat ping'ini doğrula ve 'çalıyor' dön
+  if (callPartner && callPartner.id === payload.from) {
+    sendCollabBroadcast('call-ringing', { to: payload.from, from: state.me.id });
+    return;
+  }
+
   callPartner = { id: payload.from, username: payload.fromName || 'arkadas' };
-  pendingIceCandidates = [];
+  currentCallType = payload.withVideo ? 'video' : 'audio';
+  const incomingOffer = payload;
+
+  sendCollabBroadcast('call-ringing', { to: payload.from, from: state.me.id });
+
   const modal = ensureCallModal();
   $('call-partner-name').textContent = `@${callPartner.username}`;
   setCallStatus(payload.withVideo ? 'Gelen Görüntülü Arama…' : 'Gelen Sesli Arama…');
+  const timerEl = $('call-timer-text');
+  if (timerEl) timerEl.textContent = '';
+
   const accBtn = $('call-accept-btn');
+  const hangupBtn = $('call-hangup-btn');
   accBtn.hidden = false;
+  hangupBtn.innerHTML = `${icon('phoneHangup')} Reddet`;
   modal.classList.add('open');
+
+  clearInterval(ringSoundInterval);
   playFxSound('ring');
+  ringSoundInterval = setInterval(() => playFxSound('ring'), 2500);
+
+  // Desktop bildirimi
+  if ('Notification' in window && Notification.permission === 'granted') {
+    try {
+      new Notification(`Gelen Arama: @${callPartner.username}`, {
+        body: payload.withVideo ? 'Görüntülü arama yapıyor...' : 'Sesli arama yapıyor...',
+        icon: './assets/icons/icon-192.png',
+        tag: 'call-ringing',
+      });
+    } catch {}
+  }
+
+  hangupBtn.onclick = () => {
+    clearInterval(ringSoundInterval);
+    sendCollabBroadcast('call-reject', { to: callPartner.id, from: state.me.id });
+    endCall(false);
+  };
 
   accBtn.onclick = async () => {
+    clearInterval(ringSoundInterval);
     accBtn.hidden = true;
+    hangupBtn.innerHTML = `${icon('phoneHangup')} Bitir`;
+    hangupBtn.onclick = () => endCall(true);
+    setCallStatus('Bağlanıyor…');
+
     try {
       localStream = await acquireCallStream(!!payload.withVideo);
       const localVid = $('call-local-video');
-      localVid.srcObject = localStream;
-      localVid.play?.().catch(() => {});
+      if (localVid) {
+        localVid.srcObject = localStream;
+        localVid.play?.().catch(() => {});
+      }
 
       pc = new RTCPeerConnection(ICE_SERVERS);
       localStream.getTracks().forEach(t => pc.addTrack(t, localStream));
       pc.ontrack = (e) => {
         const remVid = $('call-remote-video');
-        remVid.srcObject = e.streams[0];
-        remVid.play?.().catch(() => {});
+        if (remVid && e.streams && e.streams[0]) {
+          remVid.srcObject = e.streams[0];
+          remVid.play?.().catch(() => {});
+        }
       };
       pc.onicecandidate = (e) => {
-        if (e.candidate && collabChannel) {
-          collabChannel.send({
-            type: 'broadcast',
-            event: 'call-ice',
-            payload: { to: callPartner.id, from: state.me.id, candidate: e.candidate },
+        if (e.candidate) {
+          sendCollabBroadcast('call-ice', {
+            to: callPartner.id,
+            from: state.me.id,
+            candidate: e.candidate,
           });
         }
       };
 
-      await pc.setRemoteDescription(new RTCSessionDescription(payload.sdp));
+      await pc.setRemoteDescription(new RTCSessionDescription(incomingOffer.sdp));
       await flushPendingIce();
       const answer = await pc.createAnswer();
       await pc.setLocalDescription(answer);
 
-      collabChannel.send({
-        type: 'broadcast',
-        event: 'call-answer',
-        payload: { to: callPartner.id, from: state.me.id, sdp: pc.localDescription },
+      sendCollabBroadcast('call-answer', {
+        to: callPartner.id,
+        from: state.me.id,
+        sdp: pc.localDescription,
       });
+
+      isCallConnected = true;
       setCallStatus('Bağlandı • Canlı Görüşme');
       startCallTimer();
-    } catch {
-      toast('Arama yanıtlanamadı (Mikrofon/Kamera izni gerekli).');
+    } catch (err) {
+      console.error('Arama yanıtlama hatası:', err);
+      toast('Arama yanıtlanamadı (Mikrofon/Kamera hatası).');
       endCall(true);
     }
   };
@@ -438,21 +662,42 @@ async function onIncomingCallOffer(payload) {
 
 export function endCall(notifyRemote = true) {
   clearInterval(callTimerInt);
+  clearInterval(ringSoundInterval);
+  clearInterval(callOfferHeartbeat);
+  clearTimeout(callTimeoutTimer);
+  ringSoundInterval = null;
+  callOfferHeartbeat = null;
+  callTimeoutTimer = null;
+  isCallConnected = false;
+  currentCallType = null;
+
   clearInterval(virtualCamInterval);
   virtualCamInterval = null;
   pendingIceCandidates = [];
-  if (notifyRemote && callPartner && collabChannel && state.me) {
-    collabChannel.send({
-      type: 'broadcast',
-      event: 'call-end',
-      payload: { to: callPartner.id, from: state.me.id },
+
+  if (notifyRemote && callPartner && state.me) {
+    sendCollabBroadcast('call-end', {
+      to: callPartner.id,
+      from: state.me.id,
     });
   }
-  if (pc) { try { pc.close(); } catch {} pc = null; }
+
+  if (pc) {
+    try { pc.close(); } catch {}
+    pc = null;
+  }
   if (localStream) {
-    localStream.getTracks().forEach(t => t.stop());
+    try {
+      localStream.getTracks().forEach(t => t.stop());
+    } catch {}
     localStream = null;
   }
+
+  const remVid = $('call-remote-video');
+  if (remVid) remVid.srcObject = null;
+  const locVid = $('call-local-video');
+  if (locVid) locVid.srcObject = null;
+
   const modal = $('call-modal');
   if (modal) modal.classList.remove('open');
   callPartner = null;

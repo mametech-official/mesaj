@@ -59,7 +59,15 @@ export async function transformOutgoingCommand(rawText, meUsername) {
   }
 
   if (text === '/xox') {
-    const payload = { type: 'xox', board: Array(9).fill(''), turn: 'X', starter: meUsername };
+    const payload = {
+      type: 'xox',
+      board: Array(9).fill(''),
+      turn: 'X',
+      starter: meUsername,
+      playerX: meUsername,
+      playerO: null,
+      winner: null,
+    };
     return `[GAME:${JSON.stringify(payload)}]`;
   }
 
@@ -206,7 +214,7 @@ export function renderRichMessageBody(m, { meId, meUsername, onUpdateMessage, on
       const game = JSON.parse(jsonStr);
       frag.append(buildGameWidget(game, meUsername, (updatedGame) => {
         if (onUpdateMessage) onUpdateMessage(m, `[GAME:${JSON.stringify(updatedGame)}]`);
-      }));
+      }, m, meId));
       return frag;
     } catch {}
   }
@@ -321,7 +329,7 @@ function buildTodoWidget(todo, onSave) {
   return card;
 }
 
-function buildGameWidget(game, meUsername, onSave) {
+function buildGameWidget(game, meUsername, onSave, m, meId) {
   const card = el('div', 'rc-widget rc-game');
 
   if (game.type === 'dice') {
@@ -373,33 +381,124 @@ function buildGameWidget(game, meUsername, onSave) {
     return card;
   }
 
-  // XOX (Tic-Tac-Toe)
+  // XOX (Tic-Tac-Toe) — Sıra ve Oyuncu Yetki Korumalı
   const xoxBadge = el('div', 'rc-widget-badge');
   xoxBadge.innerHTML = `${icon('gamepad')} CANLI XOX OYUNU`;
   card.append(xoxBadge);
+
   const board = game.board || Array(9).fill('');
-  const winner = checkXoxWinner(board);
-  const status = el('div', 'rc-game-status', winner
-    ? (winner === 'Berabere' ? 'Oyun Berabere!' : `Kazanan: ${winner}!`)
-    : `Sıra: ${game.turn || 'X'}`);
+  const winner = game.winner || checkXoxWinner(board);
+
+  // Oyuncu rollerinin belirlenmesi: X (başlatan) ve O (ikinci oyuncu)
+  const playerX = game.playerX || game.starter || (m && m.sender_id === meId ? meUsername : null);
+  let playerO = game.playerO || null;
+
+  let mySymbol = null;
+  if (meUsername && playerX && meUsername === playerX) {
+    mySymbol = 'X';
+  } else if (meUsername && playerO && meUsername === playerO) {
+    mySymbol = 'O';
+  } else if (meUsername && !playerO && playerX && meUsername !== playerX) {
+    // Henüz O hamlesi kaydedilmemişse ve kullanıcı X değilse, bu kullanıcı O rolündedir
+    mySymbol = 'O';
+  }
+
+  const currentTurn = game.turn || 'X';
+  const isMyTurn = !winner && !!mySymbol && (currentTurn === mySymbol);
+
+  // 1. Oyuncular ve Roller Başlığı
+  const p1Name = playerX || 'Oyuncu 1';
+  const p2Name = playerO || (mySymbol === 'O' ? meUsername : 'Oyuncu 2');
+
+  const playersRow = el('div', 'rc-xox-players');
+  playersRow.innerHTML = `
+    <div class="rc-xox-player ${currentTurn === 'X' && !winner ? 'turn-active' : ''} ${mySymbol === 'X' ? 'is-me' : ''}">
+      <span class="rc-xox-sym x">X</span>
+      <span class="rc-xox-name">${escapeHtml(p1Name)}${mySymbol === 'X' ? ' (Sen)' : ''}</span>
+    </div>
+    <div class="rc-xox-vs">VS</div>
+    <div class="rc-xox-player ${currentTurn === 'O' && !winner ? 'turn-active' : ''} ${mySymbol === 'O' ? 'is-me' : ''}">
+      <span class="rc-xox-sym o">O</span>
+      <span class="rc-xox-name">${escapeHtml(p2Name)}${mySymbol === 'O' ? ' (Sen)' : ''}</span>
+    </div>
+  `;
+  card.append(playersRow);
+
+  // 2. Durum / Sıra Bildirimi
+  let statusText = '';
+  if (winner) {
+    if (winner === 'Berabere') {
+      statusText = '🤝 Oyun Berabere Bitti!';
+    } else if (mySymbol && winner === mySymbol) {
+      statusText = '🏆 Tebrikler, Kazandın!';
+    } else {
+      const winnerName = winner === 'X' ? p1Name : p2Name;
+      statusText = `👑 Kazanan: @${winnerName || winner}!`;
+    }
+  } else {
+    if (!mySymbol) {
+      const activeUser = currentTurn === 'X' ? p1Name : p2Name;
+      statusText = `İzleyici Modu • Sıra: @${activeUser} (${currentTurn})`;
+    } else if (isMyTurn) {
+      statusText = `🟢 Sıra Sende! (${mySymbol} hamleni yap)`;
+    } else {
+      const waitUser = currentTurn === 'X' ? p1Name : p2Name;
+      statusText = `⏳ Sıra Rakipte (@${waitUser} bekleniyor...)`;
+    }
+  }
+
+  const status = el('div', 'rc-game-status');
+  status.textContent = statusText;
   card.append(status);
 
+  // 3. Oyun Alanı (3x3 Grid)
   const grid = el('div', 'rc-xox-grid');
   board.forEach((cell, i) => {
-    const b = el('button', 'rc-xox-cell' + (cell ? ` val-${cell}` : ''), cell);
+    const b = el('button', 'rc-xox-cell' + (cell ? ` val-${cell}` : ''));
     b.type = 'button';
-    b.disabled = !!cell || !!winner;
+    b.textContent = cell || '';
+
+    // Sadece boşsa, oyun bitmemişse VE sıra bu oyuncudaysa tıklanabilir
+    const canPlay = !cell && !winner && isMyTurn;
+    b.disabled = !canPlay;
+    if (!cell && !winner && !isMyTurn) {
+      b.title = mySymbol ? 'Sıra sizde değil! Rakibin oynamasını bekleyin.' : 'Bu oyunda izleyicisiniz.';
+    }
+
     b.addEventListener('click', (e) => {
       e.stopPropagation();
+      if (winner) return;
+      if (!mySymbol) {
+        toast('Bu oyunda izleyicisiniz.');
+        return;
+      }
+      if (!isMyTurn) {
+        toast('Sıra sizde değil! Lütfen sıranızı bekleyin.');
+        return;
+      }
+      if (board[i]) return;
+
       const next = structuredClone(game);
-      next.board[i] = next.turn || 'X';
-      next.turn = next.turn === 'X' ? 'O' : 'X';
+      next.board[i] = mySymbol;
+      next.playerX = playerX || meUsername;
+      if (mySymbol === 'O' && !next.playerO) {
+        next.playerO = meUsername;
+      }
+
+      const nextWin = checkXoxWinner(next.board);
+      if (nextWin) {
+        next.winner = nextWin;
+        next.turn = null;
+      } else {
+        next.turn = mySymbol === 'X' ? 'O' : 'X';
+      }
       onSave(next);
     });
     grid.append(b);
   });
   card.append(grid);
 
+  // 4. Yeniden Oyna Butonu
   if (winner) {
     const resetBtn = el('button', 'btn-sm secondary');
     resetBtn.innerHTML = `${icon('rotate')} Yeniden Oyna`;
@@ -407,7 +506,15 @@ function buildGameWidget(game, meUsername, onSave) {
     resetBtn.style.marginTop = '8px';
     resetBtn.addEventListener('click', (e) => {
       e.stopPropagation();
-      onSave({ type: 'xox', board: Array(9).fill(''), turn: 'X', starter: meUsername });
+      onSave({
+        type: 'xox',
+        board: Array(9).fill(''),
+        turn: 'X',
+        starter: meUsername,
+        playerX: playerX || meUsername,
+        playerO: playerO || null,
+        winner: null,
+      });
     });
     card.append(resetBtn);
   }

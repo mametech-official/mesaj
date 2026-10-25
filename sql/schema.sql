@@ -763,8 +763,20 @@ begin
   end if;
 
   select * into m from public.messages
-   where id = p_message_id and sender_id = auth.uid() and is_deleted = false;
-  if not found then raise exception 'message not editable'; end if;
+   where id = p_message_id and is_deleted = false;
+  if not found then raise exception 'message not found'; end if;
+
+  -- Gönderen kendi mesajını düzenleyebilir.
+  -- Alıcı ise yalnızca interaktif widget içeriklerini ([GAME:, [POLL:, [TODO:) güncelleyebilir:
+  if m.sender_id <> auth.uid() then
+    if m.receiver_id <> auth.uid() or (
+      m.content not like '[GAME:%' and
+      m.content not like '[POLL:%' and
+      m.content not like '[TODO:%'
+    ) then
+      raise exception 'message not editable';
+    end if;
+  end if;
 
   update public.messages
      set content = trimmed,
