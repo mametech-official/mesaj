@@ -571,37 +571,39 @@ export function openContactInfoModal(chat) {
     modal.innerHTML = `
       <div class="v6-modal-card" style="max-width:440px">
         <div class="v6-modal-head">
-          <h3>${icon('info')} Kişi Bilgisi</h3>
+          <div style="display:flex;align-items:center;gap:8px;font-size:16px;font-weight:700">
+            ${icon('info', 18)} <span>Kişi Bilgisi</span>
+          </div>
           <button type="button" class="icon-btn" id="ci-close-btn">${icon('close')}</button>
         </div>
-        <div class="v6-modal-body" style="align-items:center;padding:24px 20px">
+        <div class="v6-modal-body" style="align-items:center;padding:22px 18px">
           <!-- Büyük Avatar -->
           <div style="position:relative;margin-bottom:12px">
-            <div class="avatar xl" id="ci-avatar" style="width:104px;height:104px;font-size:38px;border:3px solid var(--accent-bright);box-shadow:0 8px 24px rgba(0,0,0,0.35);cursor:pointer" title="Fotoğrafı büyüt"></div>
+            <div class="avatar xl" id="ci-avatar" style="width:96px;height:96px;font-size:36px;border:3px solid var(--accent-bright);box-shadow:0 8px 24px rgba(0,0,0,0.35);cursor:pointer" title="Fotoğrafı büyüt"></div>
             <span class="presence-dot" id="ci-presence-dot" style="width:16px;height:16px;bottom:3px;right:3px"></span>
           </div>
 
-          <h2 id="ci-username" style="font-size:20px;font-weight:700;margin-bottom:4px;color:var(--text)"></h2>
-          <div id="ci-status" style="font-size:13px;color:var(--text-sub);margin-bottom:18px"></div>
+          <h2 id="ci-username" style="font-size:19px;font-weight:700;margin-bottom:4px;color:var(--text)"></h2>
+          <div id="ci-status" style="font-size:12.5px;color:var(--text-sub);margin-bottom:16px"></div>
 
           <!-- HAKKINDA / BİYOGRAFİ KARTI -->
-          <div class="ci-card" style="width:100%;background:rgba(255,255,255,0.05);border:1px solid rgba(255,255,255,0.12);border-radius:14px;padding:14px 16px;margin-bottom:16px;text-align:left">
-            <div style="font-size:11px;font-weight:700;color:var(--accent-bright);text-transform:uppercase;letter-spacing:0.6px;margin-bottom:6px;display:flex;align-items:center;gap:6px">
-              ${icon('info')} Hakkında / Durum Metni
+          <div class="ci-card">
+            <div class="ci-card-label">
+              ${icon('info', 14)} <span>Hakkında / Durum Metni</span>
             </div>
-            <div id="ci-about" style="font-size:15px;line-height:1.5;color:var(--text);word-wrap:break-word;white-space:pre-wrap"></div>
+            <div id="ci-about" class="ci-card-text"></div>
           </div>
 
           <!-- Hızlı Eylem Butonları -->
-          <div style="display:flex;gap:10px;width:100%;margin-bottom:8px">
+          <div style="display:flex;gap:10px;width:100%;margin-top:4px">
             <button type="button" class="btn-sm secondary" id="ci-voice-call" style="flex:1;justify-content:center;padding:10px">
-              ${icon('phone')} <span>Sesli</span>
+              ${icon('phone', 15)} <span>Sesli</span>
             </button>
             <button type="button" class="btn-sm secondary" id="ci-video-call" style="flex:1;justify-content:center;padding:10px">
-              ${icon('video')} <span>Görüntülü</span>
+              ${icon('video', 15)} <span>Görüntülü</span>
             </button>
             <button type="button" class="btn-sm secondary" id="ci-gallery" style="flex:1;justify-content:center;padding:10px">
-              ${icon('image')} <span>Medya</span>
+              ${icon('image', 15)} <span>Medya</span>
             </button>
           </div>
         </div>

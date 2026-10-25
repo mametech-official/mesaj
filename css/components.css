@@ -109,6 +109,8 @@
 
 /* Modern çizgi ikonlar (icons.js → STROKE seti) */
 svg.ico {
+  width: 20px;
+  height: 20px;
   fill: none !important;
   stroke: currentColor;
   stroke-width: 1.9;
