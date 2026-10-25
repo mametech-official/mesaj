@@ -319,6 +319,11 @@ export function initComposer({ send, onTyping, onImage, onVideo, onDocument, onE
   });
 
   document.addEventListener('keydown', (e) => { if (e.key === 'Escape' && picker.isOpen()) picker.close(); });
+  document.addEventListener('click', (e) => {
+    if (picker.isOpen() && !e.target.closest('#emoji-panel') && !e.target.closest('#emoji-btn')) {
+      picker.close();
+    }
+  });
 
   /* ---------------- 5. Ses Kaydı + Ses Frekansına Duyarlı Aurora (#9) ---------------- */
   const canvas = $('rec-canvas');

@@ -31,7 +31,7 @@ export function initEmojiPicker({ onPick, onToggle }) {
   const tabs = el('div', 'emoji-tabs');
   const label = el('div', 'emoji-label');
   const grid = el('div', 'emoji-grid');
-  panel.append(tabs, label, grid);
+  panel.replaceChildren(tabs, label, grid);
 
   let activeId = 'smileys';
 
@@ -52,10 +52,11 @@ export function initEmojiPicker({ onPick, onToggle }) {
       b.addEventListener('click', () => { activeId = c.id; render(); grid.scrollTop = 0; });
       return b;
     }));
-    const cat = cats.find((c) => c.id === activeId);
+    const cat = cats.find((c) => c.id === activeId) || cats[0];
     label.textContent = cat.label;
     const frag = document.createDocumentFragment();
-    for (const e of cat.emojis.split(' ')) {
+    const emojiList = (cat.emojis || '').trim().split(/\s+/).filter(Boolean);
+    for (const e of emojiList) {
       const b = el('button', null, e);
       b.type = 'button';
       b.addEventListener('click', () => { saveRecent(e); onPick(e); });
