@@ -460,6 +460,9 @@ export async function openChat(chat) {
   $('empty-state').hidden = true;
   const view = $('chat-view');
   view.hidden = false;
+  view.classList.remove('chat-slide-in');
+  void view.offsetWidth;
+  view.classList.add('chat-slide-in');
   $('app').classList.add('chat-open');
   bus.emit('chat:active');
 
@@ -560,10 +563,15 @@ export function closeChat() {
   loaded = []; loadedIds = new Set();
   starredSet.clear();
   reactionsMap.clear();
-  $('chat-view').hidden = true;
-  $('empty-state').hidden = false;
   $('app').classList.remove('chat-open');
   bus.emit('chat:active');
+
+  setTimeout(() => {
+    if (!state.activeChat) {
+      $('chat-view').hidden = true;
+      $('empty-state').hidden = false;
+    }
+  }, 260);
 }
 
 export function resetChatView() {
