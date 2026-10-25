@@ -1,0 +1,348 @@
+<!DOCTYPE html>
+<html lang="tr">
+<head>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width, initial-scale=1.0">
+<title>Mesaj — Apple iOS (iPhone 16 Pro) Canlı PC Simülatörü</title>
+<link rel="preconnect" href="https://fonts.googleapis.com">
+<link href="https://fonts.googleapis.com/css2?family=Inter:wght@400;500;600;700;800&display=swap" rel="stylesheet">
+<style>
+  * { box-sizing: border-box; margin: 0; padding: 0; }
+  body {
+    min-height: 100vh;
+    background: radial-gradient(circle at 50% 20%, #152232 0%, #070c12 75%);
+    color: #eef2f5;
+    font-family: 'Inter', -apple-system, BlinkMacSystemFont, sans-serif;
+    display: flex;
+    flex-direction: column;
+    align-items: center;
+    padding: 16px 20px 28px;
+    overflow-x: hidden;
+  }
+
+  /* Üst Kontrol Çubuğu */
+  .sim-toolbar {
+    display: flex;
+    align-items: center;
+    gap: 10px;
+    background: rgba(18, 29, 40, 0.92);
+    border: 1px solid rgba(255, 255, 255, 0.12);
+    padding: 10px 18px;
+    border-radius: 16px;
+    margin-bottom: 18px;
+    flex-wrap: wrap;
+    justify-content: center;
+    box-shadow: 0 12px 32px rgba(0, 0, 0, 0.45);
+  }
+  .sim-brand {
+    display: flex;
+    align-items: center;
+    gap: 8px;
+    font-weight: 800;
+    font-size: 14px;
+    color: #fff;
+    padding-right: 12px;
+    border-right: 1px solid rgba(255, 255, 255, 0.12);
+  }
+  .sim-brand span.apple-logo {
+    font-size: 18px;
+  }
+  .sim-btn {
+    padding: 7px 13px;
+    border-radius: 10px;
+    border: 1px solid rgba(255, 255, 255, 0.12);
+    background: rgba(255, 255, 255, 0.05);
+    color: #d1dce5;
+    font-size: 12.5px;
+    font-weight: 600;
+    cursor: pointer;
+    transition: all 0.15s;
+  }
+  .sim-btn:hover {
+    background: rgba(255, 255, 255, 0.12);
+    color: #fff;
+  }
+  .sim-btn.active {
+    background: #00a884;
+    border-color: #00e5b3;
+    color: #fff;
+    box-shadow: 0 0 14px rgba(0, 229, 179, 0.35);
+  }
+
+  /* Sahne */
+  .sim-stage {
+    display: flex;
+    align-items: center;
+    justify-content: center;
+    gap: 32px;
+    flex-wrap: wrap;
+    width: 100%;
+  }
+
+  /* iPhone 16 Pro Titanyum Kasa */
+  .iphone-shell {
+    position: relative;
+    width: 393px;
+    height: 832px;
+    border-radius: 56px;
+    background: #0b141a;
+    padding: 13px;
+    box-shadow:
+      0 0 0 2px #525861,
+      0 0 0 5px #22262b,
+      0 28px 70px rgba(0, 0, 0, 0.78);
+    transition: width 0.25s ease, height 0.25s ease;
+    display: flex;
+    flex-direction: column;
+    user-select: none;
+  }
+
+  /* Fiziksel Yan Tuşlar */
+  .iphone-shell::before {
+    content: "";
+    position: absolute;
+    left: -7px;
+    top: 135px;
+    width: 3px;
+    height: 32px;
+    background: #434952;
+    border-radius: 3px 0 0 3px;
+    box-shadow: 0 52px 0 #434952, 0 112px 0 #434952;
+  }
+  .iphone-shell::after {
+    content: "";
+    position: absolute;
+    right: -7px;
+    top: 195px;
+    width: 3px;
+    height: 82px;
+    background: #434952;
+    border-radius: 0 3px 3px 0;
+  }
+
+  .iphone-screen {
+    position: relative;
+    width: 100%;
+    height: 100%;
+    border-radius: 44px;
+    overflow: hidden;
+    background: #070d12;
+    display: flex;
+    flex-direction: column;
+  }
+
+  /* iOS 18 Üst Durum Çubuğu + Dynamic Island */
+  .ios-statusbar {
+    height: 44px;
+    background: #131f29;
+    display: flex;
+    align-items: center;
+    justify-content: space-between;
+    padding: 0 24px;
+    font-size: 13px;
+    font-weight: 700;
+    color: #fff;
+    position: relative;
+    z-index: 10;
+    flex-shrink: 0;
+  }
+  .dynamic-island {
+    position: absolute;
+    left: 50%;
+    top: 8px;
+    transform: translateX(-50%);
+    width: 112px;
+    height: 28px;
+    background: #000;
+    border-radius: 99px;
+    display: flex;
+    align-items: center;
+    justify-content: flex-end;
+    padding: 0 9px;
+    gap: 6px;
+    box-shadow: inset 0 0 2px rgba(255, 255, 255, 0.16);
+  }
+  .di-cam {
+    width: 10px;
+    height: 10px;
+    border-radius: 50%;
+    background: radial-gradient(circle at 35% 35%, #25406b, #080d18 70%);
+    border: 1px solid #1a2436;
+  }
+  .di-dot {
+    width: 6px;
+    height: 6px;
+    border-radius: 50%;
+    background: #10b981;
+    box-shadow: 0 0 6px #10b981;
+  }
+  .ios-status-icons {
+    display: flex;
+    align-items: center;
+    gap: 6px;
+    font-size: 11.5px;
+  }
+  .ios-battery {
+    display: inline-block;
+    width: 22px;
+    height: 11px;
+    border: 1.5px solid rgba(255, 255, 255, 0.85);
+    border-radius: 3.5px;
+    padding: 1.5px;
+    position: relative;
+  }
+  .ios-battery::after {
+    content: "";
+    position: absolute;
+    right: -3.5px;
+    top: 2.5px;
+    width: 2px;
+    height: 4px;
+    background: rgba(255, 255, 255, 0.85);
+    border-radius: 0 1px 1px 0;
+  }
+  .ios-battery-fill {
+    width: 100%;
+    height: 100%;
+    background: #25d366;
+    border-radius: 1px;
+  }
+
+  /* Uygulama İframe Alanı */
+  .ios-app-frame {
+    flex: 1;
+    width: 100%;
+    border: 0;
+    background: #070d12;
+  }
+
+  /* iOS Alt Home Indicator Çubuğu */
+  .ios-home-bar {
+    height: 20px;
+    background: #0e171f;
+    display: flex;
+    align-items: center;
+    justify-content: center;
+    flex-shrink: 0;
+  }
+  .ios-home-pill {
+    width: 134px;
+    height: 5px;
+    border-radius: 99px;
+    background: rgba(255, 255, 255, 0.65);
+  }
+
+  .device-label {
+    text-align: center;
+    font-size: 12px;
+    color: #8fa1ad;
+    margin-top: 10px;
+    font-weight: 600;
+  }
+</style>
+</head>
+<body>
+
+<div class="sim-toolbar">
+  <div class="sim-brand">
+    <span class="apple-logo">🍎</span>
+    <span>Apple iOS Simülatörü (iOS 18)</span>
+  </div>
+  <button type="button" class="sim-btn active" onclick="setSize(393, 832, this)">iPhone 16 Pro</button>
+  <button type="button" class="sim-btn" onclick="setSize(430, 892, this)">iPhone 16 Pro Max</button>
+  <button type="button" class="sim-btn" onclick="setSize(375, 687, this)">iPhone SE</button>
+  <button type="button" class="sim-btn" onclick="setSize(768, 920, this)">iPad Air</button>
+  <button type="button" class="sim-btn" id="dual-btn" onclick="toggleDualIphone()">📱📱 2. iPhone Ekranı Aç (Karşılıklı Test)</button>
+  <button type="button" class="sim-btn" onclick="reloadFrames()">🔄 Yenile</button>
+</div>
+
+<div class="sim-stage" id="sim-stage">
+  <!-- 1. iPhone -->
+  <div>
+    <div class="iphone-shell" id="shell-1">
+      <div class="iphone-screen">
+        <div class="ios-statusbar">
+          <span class="ios-clock">15:21</span>
+          <div class="dynamic-island">
+            <span class="di-dot" title="iOS Gizlilik Göstergesi"></span>
+            <span class="di-cam"></span>
+          </div>
+          <div class="ios-status-icons">
+            <span>5G</span>
+            <span class="ios-battery"><span class="ios-battery-fill"></span></span>
+          </div>
+        </div>
+        <iframe class="ios-app-frame" id="frame-1" src="index.html?ios_sim=1" allow="camera; microphone; geolocation; clipboard-write"></iframe>
+        <div class="ios-home-bar"><div class="ios-home-pill"></div></div>
+      </div>
+    </div>
+    <div class="device-label">iPhone #1 — Apple iOS (com.mametech.mesaj)</div>
+  </div>
+
+  <!-- 2. iPhone (Karşılıklı Test İçin) -->
+  <div id="second-device-wrap" style="display:none">
+    <div class="iphone-shell" id="shell-2">
+      <div class="iphone-screen">
+        <div class="ios-statusbar">
+          <span class="ios-clock">15:21</span>
+          <div class="dynamic-island">
+            <span class="di-dot"></span>
+            <span class="di-cam"></span>
+          </div>
+          <div class="ios-status-icons">
+            <span>Wi-Fi</span>
+            <span class="ios-battery"><span class="ios-battery-fill"></span></span>
+          </div>
+        </div>
+        <iframe class="ios-app-frame" id="frame-2" src="about:blank" allow="camera; microphone; geolocation; clipboard-write"></iframe>
+        <div class="ios-home-bar"><div class="ios-home-pill"></div></div>
+      </div>
+    </div>
+    <div class="device-label">iPhone #2 — Karşı Taraf Test Cihazı</div>
+  </div>
+</div>
+
+<script>
+  function updateClocks() {
+    const now = new Date();
+    const t = String(now.getHours()).padStart(2, '0') + ':' + String(now.getMinutes()).padStart(2, '0');
+    document.querySelectorAll('.ios-clock').forEach(el => { el.textContent = t; });
+  }
+  updateClocks();
+  setInterval(updateClocks, 15000);
+
+  function setSize(w, h, btn) {
+    document.querySelectorAll('.sim-toolbar .sim-btn').forEach(b => {
+      if (b.id !== 'dual-btn') b.classList.remove('active');
+    });
+    btn.classList.add('active');
+    document.querySelectorAll('.iphone-shell').forEach(s => {
+      s.style.width = w + 'px';
+      s.style.height = h + 'px';
+    });
+  }
+
+  let dualOpen = false;
+  function toggleDualIphone() {
+    dualOpen = !dualOpen;
+    const wrap = document.getElementById('second-device-wrap');
+    const btn = document.getElementById('dual-btn');
+    const f2 = document.getElementById('frame-2');
+    wrap.style.display = dualOpen ? 'block' : 'none';
+    btn.classList.toggle('active', dualOpen);
+    if (dualOpen && f2.src === 'about:blank') {
+      f2.src = 'index.html?ios_sim=2';
+    }
+  }
+
+  function reloadFrames() {
+    const f1 = document.getElementById('frame-1');
+    f1.contentWindow.location.reload();
+    if (dualOpen) {
+      const f2 = document.getElementById('frame-2');
+      f2.contentWindow.location.reload();
+    }
+  }
+</script>
+</body>
+</html>
