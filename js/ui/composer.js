@@ -11,7 +11,7 @@ import { state } from '../state.js';
 import { VoiceRecorder } from '../services/recorder.js';
 import { initEmojiPicker } from './emoji-picker.js';
 import { createAudioPlayer } from './audio-player.js';
-import { SLASH_COMMANDS, transformOutgoingCommand } from './rich-content.js';
+import { SLASH_COMMANDS, transformOutgoingCommand, openLocationPickerModal } from './rich-content.js';
 import { openCameraModal, startVoiceDictation } from './media-studio.js';
 import { openWhiteboardModal, sendNudgeBroadcast } from './live-collab.js';
 import { setAudioReactiveLevel } from './canvas-bg.js';
@@ -111,6 +111,18 @@ export function initComposer({ send, onTyping, onImage, onVideo, onDocument, onE
           if (state.activeChat) openWhiteboardModal(state.activeChat.id, onImage);
           return;
         }
+        if (m.cmd === '/konum') {
+          input.value = '';
+          slashMenu.hidden = true;
+          autoGrow(); updateAction();
+          openLocationPickerModal(async (locPayload) => {
+            const replyId = replyTarget ? replyTarget.id : null;
+            playFxSound('out');
+            await send({ content: locPayload, replyToId: replyId });
+            cancelReply();
+          });
+          return;
+        }
         input.value = m.sample;
         slashMenu.hidden = true;
         input.focus();
@@ -196,6 +208,19 @@ export function initComposer({ send, onTyping, onImage, onVideo, onDocument, onE
       return;
     }
 
+    if (rawText.toLowerCase() === '/konum') {
+      input.value = '';
+      saveDraft();
+      autoGrow(); updateAction();
+      openLocationPickerModal(async (locPayload) => {
+        const replyId = replyTarget ? replyTarget.id : null;
+        playFxSound('out');
+        await send({ content: locPayload, replyToId: replyId });
+        cancelReply();
+      });
+      return;
+    }
+
     busy = true;
     try {
       if (editTarget) {
@@ -261,7 +286,14 @@ export function initComposer({ send, onTyping, onImage, onVideo, onDocument, onE
       { id: 'btn-attach-poll',  ico: 'chart',      label: 'Canlı Anket Oluştur', action: () => { input.value = '/anket Akşam ne yapalım? | Sinema | Kahve | Oyun'; autoGrow(); updateAction(); input.focus(); } },
       { id: 'btn-attach-todo',  ico: 'listChecks', label: 'Ortak Yapılacaklar', action: () => { input.value = '/todo Görev Listesi | İlk madde | İkinci madde'; autoGrow(); updateAction(); input.focus(); } },
       { id: 'btn-attach-game',  ico: 'gamepad',    label: 'Canlı XOX Oyunu', action: () => { input.value = '/xox'; submitText(); } },
-      { id: 'btn-attach-loc',   ico: 'mapPin',     label: 'Konum Paylaş', action: () => { input.value = '/konum'; submitText(); } },
+      { id: 'btn-attach-loc',   ico: 'mapPin',     label: 'Konum Paylaş', action: () => {
+        openLocationPickerModal(async (locPayload) => {
+          const replyId = replyTarget ? replyTarget.id : null;
+          playFxSound('out');
+          await send({ content: locPayload, replyToId: replyId });
+          cancelReply();
+        });
+      } },
       { id: 'btn-attach-wb',    ico: 'palette',    label: 'Ortak Çizim Tahtası', action: () => { if (state.activeChat) openWhiteboardModal(state.activeChat.id, onImage); } },
       { id: 'btn-attach-dict',  ico: 'mic',        label: 'Sesli Dikte (Yazıya Çevir)', action: () => startVoiceDictation((txt) => insertAtCursor(txt + ' ')) },
     ];

@@ -4,7 +4,7 @@
  *  Mini Oyunlar (XOX, Taş-Kağıt-Makas, Zar), Konum Kartı, Bağlantı Önizlemesi,
  *  Süreli/Tek Gösterimlik Mesajlar, Akıllı Yanıtlar, Anlık Çeviri, Eğik Çizgi Komutları
  * ===================================================================== */
-import { el } from '../utils.js';
+import { $, el } from '../utils.js';
 import { icon } from './icons.js';
 import { toast } from './toast.js';
 
@@ -90,27 +90,20 @@ export async function transformOutgoingCommand(rawText, meUsername) {
     return `[TTL:${exp}]${body}`;
   }
 
-  if (text.startsWith('/konum')) {
-    return new Promise((resolve) => {
-      if (!navigator.geolocation) {
-        resolve(`[LOC:${JSON.stringify({ lat: 41.0082, lng: 28.9784, label: 'İstanbul, Türkiye' })}]`);
-        return;
+  if (text.toLowerCase().startsWith('/konum')) {
+    const query = text.replace(/^\/konum\s*/i, '').trim();
+    if (query) {
+      toast(`"${query}" konumu aranıyor…`);
+      const results = await searchNominatimPlaces(query);
+      if (results.length > 0) {
+        const best = results[0];
+        return `[LOC:${JSON.stringify({ lat: best.lat, lng: best.lng, label: best.label })}]`;
       }
-      toast('Konum alınıyor…');
-      navigator.geolocation.getCurrentPosition(
-        (pos) => {
-          resolve(`[LOC:${JSON.stringify({
-            lat: Number(pos.coords.latitude.toFixed(5)),
-            lng: Number(pos.coords.longitude.toFixed(5)),
-            label: 'Paylaşılan Canlı Konum',
-          })}]`);
-        },
-        () => {
-          resolve(`[LOC:${JSON.stringify({ lat: 41.0082, lng: 28.9784, label: 'İstanbul (Varsayılan Konum)' })}]`);
-        },
-        { timeout: 5000 }
-      );
-    });
+    }
+    toast('Cihaz GPS konumu alınıyor…');
+    const pos = await getBrowserGPSPosition();
+    const addrLabel = await reverseGeocode(pos.lat, pos.lng);
+    return `[LOC:${JSON.stringify({ lat: pos.lat, lng: pos.lng, label: addrLabel })}]`;
   }
 
   if (text === '/titret') {
@@ -574,24 +567,343 @@ function checkXoxWinner(b) {
 }
 
 function buildLocationWidget(loc) {
+  const lat = Number(loc.lat) || 39.9208;
+  const lng = Number(loc.lng) || 32.8541;
+  const dLat = 0.004;
+  const dLng = 0.006;
+  const bbox = `${(lng - dLng).toFixed(5)}%2C${(lat - dLat).toFixed(5)}%2C${(lng + dLng).toFixed(5)}%2C${(lat + dLat).toFixed(5)}`;
+  const embedUrl = `https://www.openstreetmap.org/export/embed.html?bbox=${bbox}&layer=mapnik&marker=${lat}%2C${lng}`;
+
   const card = el('div', 'rc-widget rc-loc');
   card.innerHTML = `
-    <div class="rc-loc-map">
-      <div class="rc-loc-pin">${icon('mapPin')}</div>
-      <div class="rc-loc-grid"></div>
+    <div class="rc-loc-map-embed">
+      <iframe
+        src="${embedUrl}"
+        loading="lazy"
+        referrerpolicy="no-referrer-when-downgrade"
+        title="Konum Haritası"></iframe>
     </div>
     <div class="rc-loc-body">
-      <b>${escapeHtml(loc.label || 'Konum Paylaşımı')}</b>
-      <small>${loc.lat}, ${loc.lng}</small>
+      <b><span class="ico-inline">${icon('mapPin')}</span> ${escapeHtml(loc.label || 'Paylaşılan Konum')}</b>
+      <small>${lat.toFixed(5)}, ${lng.toFixed(5)}</small>
     </div>
   `;
+
+  const actRow = el('div', 'rc-loc-actions');
+
   const openBtn = el('a', 'btn-sm primary');
   openBtn.innerHTML = `${icon('map')} Haritada Aç`;
-  openBtn.href = `https://www.openstreetmap.org/?mlat=${loc.lat}&mlon=${loc.lng}#map=15/${loc.lat}/${loc.lng}`;
+  openBtn.href = `https://www.openstreetmap.org/?mlat=${lat}&mlon=${lng}#map=16/${lat}/${lng}`;
   openBtn.target = '_blank';
   openBtn.rel = 'noopener noreferrer';
-  card.append(openBtn);
+
+  const gmapsBtn = el('a', 'btn-sm secondary');
+  gmapsBtn.textContent = 'Google Haritalar';
+  gmapsBtn.href = `https://www.google.com/maps?q=${lat},${lng}`;
+  gmapsBtn.target = '_blank';
+  gmapsBtn.rel = 'noopener noreferrer';
+
+  actRow.append(openBtn, gmapsBtn);
+  card.append(actRow);
   return card;
+}
+
+/* ---------------- 3.1 Gerçek Konum Çözümleyici ve Canlı Harita Seçici Modal (#40) ---------------- */
+async function reverseGeocode(lat, lng) {
+  try {
+    const res = await fetch(
+      `https://nominatim.openstreetmap.org/reverse?format=json&lat=${encodeURIComponent(lat)}&lon=${encodeURIComponent(lng)}&zoom=16&addressdetails=1&accept-language=tr`,
+      { headers: { Accept: 'application/json' } }
+    );
+    if (!res.ok) throw new Error('Reverse geocode failed');
+    const data = await res.json();
+    const addr = data.address || {};
+    const parts = [
+      addr.road || addr.pedestrian || '',
+      addr.suburb || addr.neighbourhood || addr.quarter || addr.village || '',
+      addr.town || addr.city_district || addr.district || addr.county || addr.municipality || '',
+      addr.province || addr.state || addr.city || '',
+    ].filter(Boolean);
+
+    const unique = [];
+    for (const p of parts) {
+      if (!unique.some((u) => u.toLowerCase() === p.toLowerCase())) unique.push(p);
+    }
+    if (unique.length >= 2) {
+      const last = unique.pop();
+      const secondLast = unique.pop();
+      const prefix = unique.length ? unique.join(', ') + ', ' : '';
+      return `${prefix}${secondLast} / ${last}`;
+    }
+    if (unique.length === 1) return unique[0];
+    if (data.display_name) {
+      return data.display_name.split(',').slice(0, 3).map((s) => s.trim()).join(', ');
+    }
+  } catch {}
+  return `Seçilen Konum (${Number(lat).toFixed(4)}, ${Number(lng).toFixed(4)})`;
+}
+
+async function searchNominatimPlaces(query) {
+  if (!query || !query.trim()) return [];
+  try {
+    const res = await fetch(
+      `https://nominatim.openstreetmap.org/search?format=json&q=${encodeURIComponent(query.trim())}&addressdetails=1&limit=5&accept-language=tr`,
+      { headers: { Accept: 'application/json' } }
+    );
+    if (!res.ok) return [];
+    const list = await res.json();
+    return (list || []).map((item) => {
+      const lat = Number(Number(item.lat).toFixed(5));
+      const lng = Number(Number(item.lon).toFixed(5));
+      const shortLabel = (item.display_name || '')
+        .split(',')
+        .slice(0, 3)
+        .map((s) => s.trim())
+        .join(', ');
+      return {
+        lat,
+        lng,
+        label: shortLabel || item.name || query.trim(),
+        full: item.display_name || shortLabel,
+      };
+    });
+  } catch {
+    return [];
+  }
+}
+
+function getBrowserGPSPosition() {
+  return new Promise((resolve, reject) => {
+    if (!navigator.geolocation) {
+      reject(new Error('Tarayıcı konum özelliğini desteklemiyor.'));
+      return;
+    }
+    navigator.geolocation.getCurrentPosition(
+      (pos) => resolve({
+        lat: Number(pos.coords.latitude.toFixed(5)),
+        lng: Number(pos.coords.longitude.toFixed(5)),
+        accuracy: Math.round(pos.coords.accuracy || 0),
+      }),
+      (err1) => {
+        if (err1 && err1.code === 1) {
+          reject(err1);
+          return;
+        }
+        navigator.geolocation.getCurrentPosition(
+          (pos2) => resolve({
+            lat: Number(pos2.coords.latitude.toFixed(5)),
+            lng: Number(pos2.coords.longitude.toFixed(5)),
+            accuracy: Math.round(pos2.coords.accuracy || 0),
+          }),
+          (err2) => reject(err2),
+          { enableHighAccuracy: false, timeout: 10000, maximumAge: 60000 }
+        );
+      },
+      { enableHighAccuracy: true, timeout: 12000, maximumAge: 0 }
+    );
+  });
+}
+
+let leafletLoadPromise = null;
+function ensureLeafletLoaded() {
+  if (window.L) return Promise.resolve(window.L);
+  if (leafletLoadPromise) return leafletLoadPromise;
+  leafletLoadPromise = new Promise((resolve, reject) => {
+    if (!document.getElementById('leaflet-css')) {
+      const link = document.createElement('link');
+      link.id = 'leaflet-css';
+      link.rel = 'stylesheet';
+      link.href = 'https://cdn.jsdelivr.net/npm/leaflet@1.9.4/dist/leaflet.css';
+      document.head.appendChild(link);
+    }
+    const script = document.createElement('script');
+    script.src = 'https://cdn.jsdelivr.net/npm/leaflet@1.9.4/dist/leaflet.js';
+    script.onload = () => resolve(window.L);
+    script.onerror = (err) => {
+      leafletLoadPromise = null;
+      reject(err);
+    };
+    document.head.appendChild(script);
+  });
+  return leafletLoadPromise;
+}
+
+let locMap = null;
+let locMarker = null;
+let currentLocState = { lat: 39.9208, lng: 32.8541, label: 'Konum Seçiliyor…' };
+let activeSendLocCallback = null;
+
+export async function openLocationPickerModal(onSendLocation) {
+  activeSendLocCallback = onSendLocation;
+  let modal = $('location-picker-modal');
+  if (!modal) {
+    modal = el('div', 'v6-modal');
+    modal.id = 'location-picker-modal';
+    modal.innerHTML = `
+      <div class="v6-modal-card loc-modal-card" style="max-width:560px">
+        <div class="v6-modal-head">
+          <h3>${icon('mapPin')} Canlı Konum Seç ve Paylaş</h3>
+          <button type="button" class="icon-btn" id="loc-modal-close">${icon('close')}</button>
+        </div>
+        <div class="v6-modal-body loc-modal-body">
+          <div class="loc-search-bar">
+            <input type="text" id="loc-search-input" placeholder="Şehir, ilçe, mahalle veya mekan ara… (Örn: Kadıköy, Çankaya)" autocomplete="off">
+            <button type="button" class="btn-sm primary" id="loc-search-btn">${icon('search')} Ara</button>
+          </div>
+          <div id="loc-search-results" class="loc-search-results" hidden></div>
+
+          <div class="loc-gps-row">
+            <button type="button" class="btn-sm secondary" id="loc-gps-btn">${icon('mapPin')} GPS Konumumu Bul</button>
+            <span id="loc-status-text" class="loc-status-text">Haritaya tıklayarak veya arayarak tam konum seçebilirsiniz.</span>
+          </div>
+
+          <div id="loc-picker-map" class="loc-picker-map"></div>
+
+          <div class="loc-selected-box">
+            <label for="loc-label-input">Konum Başlığı / Adres:</label>
+            <input type="text" id="loc-label-input" placeholder="Adres veya konum adı…">
+            <small id="loc-coords-text">39.92080, 32.85410</small>
+          </div>
+
+          <div class="loc-modal-foot">
+            <button type="button" class="btn-sm secondary" id="loc-cancel-btn">İptal</button>
+            <button type="button" class="btn-sm primary" id="loc-send-btn">${icon('send')} Bu Konumu Gönder</button>
+          </div>
+        </div>
+      </div>
+    `;
+    document.body.appendChild(modal);
+
+    const closeModal = () => modal.classList.remove('open');
+    modal.addEventListener('click', (e) => {
+      if (e.target === modal || e.target.closest('#loc-modal-close') || e.target.closest('#loc-cancel-btn')) {
+        closeModal();
+      }
+    });
+
+    const doSearch = async () => {
+      const q = $('loc-search-input').value.trim();
+      const resBox = $('loc-search-results');
+      if (!q) {
+        resBox.hidden = true;
+        return;
+      }
+      $('loc-status-text').textContent = `"${q}" aranıyor…`;
+      const items = await searchNominatimPlaces(q);
+      if (!items.length) {
+        resBox.hidden = true;
+        $('loc-status-text').textContent = 'Sonuç bulunamadı. Farklı bir ilçe/mahalle adı deneyin.';
+        return;
+      }
+      resBox.innerHTML = '';
+      items.forEach((it) => {
+        const b = el('button', 'loc-res-item');
+        b.type = 'button';
+        b.innerHTML = `<b>${escapeHtml(it.label)}</b><small>${escapeHtml(it.full)}</small>`;
+        b.addEventListener('click', () => {
+          resBox.hidden = true;
+          updatePickedPoint(it.lat, it.lng, it.label, true, 16);
+          $('loc-status-text').textContent = '✓ Arama sonucuna gidildi.';
+        });
+        resBox.append(b);
+      });
+      resBox.hidden = false;
+      // İlk sonuca otomatik odaklan
+      updatePickedPoint(items[0].lat, items[0].lng, items[0].label, true, 15);
+      $('loc-status-text').textContent = `✓ "${items[0].label}" bulundu.`;
+    };
+
+    $('loc-search-btn').addEventListener('click', doSearch);
+    $('loc-search-input').addEventListener('keydown', (e) => {
+      if (e.key === 'Enter') {
+        e.preventDefault();
+        doSearch();
+      }
+    });
+
+    $('loc-gps-btn').addEventListener('click', () => triggerGPSDetect());
+
+    $('loc-send-btn').addEventListener('click', () => {
+      const customLabel = $('loc-label-input').value.trim() || currentLocState.label || 'Paylaşılan Konum';
+      const payload = `[LOC:${JSON.stringify({
+        lat: Number(currentLocState.lat.toFixed(5)),
+        lng: Number(currentLocState.lng.toFixed(5)),
+        label: customLabel,
+      })}]`;
+      closeModal();
+      if (activeSendLocCallback) activeSendLocCallback(payload);
+    });
+  }
+
+  modal.classList.add('open');
+  $('loc-search-results').hidden = true;
+
+  try {
+    const L = await ensureLeafletLoaded();
+    if (!locMap) {
+      locMap = L.map('loc-picker-map').setView([currentLocState.lat, currentLocState.lng], 6);
+      L.tileLayer('https://{s}.tile.openstreetmap.org/{z}/{x}/{y}.png', {
+        maxZoom: 19,
+        attribution: '© OpenStreetMap',
+      }).addTo(locMap);
+
+      locMarker = L.marker([currentLocState.lat, currentLocState.lng], { draggable: true }).addTo(locMap);
+      locMarker.on('dragend', async () => {
+        const pos = locMarker.getLatLng();
+        await updatePickedPoint(pos.lat, pos.lng, null, false);
+        $('loc-status-text').textContent = '✓ Harita üzerinden seçildi.';
+      });
+
+      locMap.on('click', async (e) => {
+        await updatePickedPoint(e.latlng.lat, e.latlng.lng, null, false);
+        $('loc-status-text').textContent = '✓ Harita üzerinden seçildi.';
+      });
+    }
+    setTimeout(() => locMap.invalidateSize(), 120);
+  } catch {}
+
+  await triggerGPSDetect();
+}
+
+async function updatePickedPoint(lat, lng, explicitLabel = null, panMap = true, zoomLevel = null) {
+  currentLocState.lat = Number(Number(lat).toFixed(5));
+  currentLocState.lng = Number(Number(lng).toFixed(5));
+  if ($('loc-coords-text')) {
+    $('loc-coords-text').textContent = `${currentLocState.lat.toFixed(5)}, ${currentLocState.lng.toFixed(5)}`;
+  }
+  if (locMarker) {
+    locMarker.setLatLng([currentLocState.lat, currentLocState.lng]);
+  }
+  if (locMap && panMap) {
+    if (zoomLevel) locMap.setView([currentLocState.lat, currentLocState.lng], zoomLevel);
+    else locMap.panTo([currentLocState.lat, currentLocState.lng]);
+  }
+  if (explicitLabel) {
+    currentLocState.label = explicitLabel;
+    if ($('loc-label-input')) $('loc-label-input').value = explicitLabel;
+  } else {
+    if ($('loc-label-input')) $('loc-label-input').value = 'Adres çözümleniyor…';
+    const resolved = await reverseGeocode(currentLocState.lat, currentLocState.lng);
+    currentLocState.label = resolved;
+    if ($('loc-label-input')) $('loc-label-input').value = resolved;
+  }
+}
+
+async function triggerGPSDetect() {
+  const statusEl = $('loc-status-text');
+  if (statusEl) statusEl.textContent = '📡 Cihaz GPS konumu alınıyor (İzin bekleniyor)…';
+  try {
+    const pos = await getBrowserGPSPosition();
+    await updatePickedPoint(pos.lat, pos.lng, null, true, 16);
+    if (statusEl) {
+      statusEl.textContent = `✓ GPS Konumu Bulundu (±${pos.accuracy}m doğruluk)`;
+    }
+  } catch (err) {
+    if (statusEl) {
+      statusEl.textContent = '⚠️ Tarayıcı/Windows GPS izni kapalı. Üstten şehrinizi arayın veya haritadan seçin.';
+    }
+    if ($('loc-search-input')) $('loc-search-input').focus();
+  }
 }
 
 function buildContactCardWidget(contact, onOpenContact) {
