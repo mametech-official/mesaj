@@ -31,6 +31,9 @@ export function initCommandPalette({ onSelectChat }) {
   bus.on('stories:changed', () => {
     renderStoriesBar();
   });
+  bus.on('chats:changed', () => {
+    renderStoriesBar();
+  });
 
   document.addEventListener('keydown', (e) => {
     if ((e.ctrlKey || e.metaKey) && e.key.toLowerCase() === 'k') {
@@ -358,8 +361,20 @@ export function renderStoriesBar() {
     return Boolean(gUser && myUser && gUser === myUser);
   };
 
+  const isFriend = (g) => {
+    if (!state.chats || !state.chats.length) return false;
+    const gUser = (g.username || '').toLowerCase().trim();
+    const gId = g.userId ? String(g.userId).trim() : null;
+    return state.chats.some(c => {
+      if (gId && c.contact_id && String(c.contact_id).trim() === gId) return true;
+      if (gUser && c.username && c.username.toLowerCase().trim() === gUser) return true;
+      return false;
+    });
+  };
+
   const myGroup = groups.find(g => isMe(g));
-  const otherGroups = groups.filter(g => !isMe(g) && g.stories && g.stories.length > 0);
+  // Yalnızca arkadaşımız olan kişilerin hikayelerini listele (Yabancıların hikayeleri asla görünmez)
+  const otherGroups = groups.filter(g => !isMe(g) && isFriend(g) && g.stories && g.stories.length > 0);
 
   // Viewer için sıralı tüm gruplar listesi (Önce ben, sonra diğer kullanıcılar)
   const allOrderedGroups = [];

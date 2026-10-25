@@ -6,8 +6,15 @@ import { state, bus } from '../state.js';
 import { sb } from '../supabase.js';
 import { CONFIG, uuid } from '../utils.js';
 
-const STORAGE_KEY = 'wa_stories_v6';
+const STORAGE_PREFIX = 'wa_stories_v7_';
 const STORY_TTL_MS = 24 * 60 * 60 * 1000; // 24 saat
+
+// Eski genel ve güvensiz depolamayı temizle
+try { localStorage.removeItem('wa_stories_v6'); } catch {}
+
+function getStorageKey() {
+  return state.me?.id ? `${STORAGE_PREFIX}${state.me.id}` : null;
+}
 
 export const STORY_GRADIENTS = [
   'linear-gradient(135deg, #00d9a6, #0284c7)',
@@ -115,13 +122,28 @@ export async function uploadStoryMedia(fileOrBlob, mediaType) {
   return await blobToDataUrl(fileOrBlob);
 }
 
-/** 24 saati geçmemiş tüm geçerli hikayeleri döndürür (en yeniden eskiye) */
+/** 24 saati geçmemiş, yalnızca bana ve arkadaşlarıma ait geçerli hikayeleri döndürür */
 export function getStories() {
+  if (!state.me) return [];
   try {
-    const raw = JSON.parse(localStorage.getItem(STORAGE_KEY) || '[]');
+    const key = getStorageKey();
+    const raw = key ? JSON.parse(localStorage.getItem(key) || '[]') : [];
     const cutoff = Date.now() - STORY_TTL_MS;
+
+    const friendIds = new Set((state.chats || []).map(c => String(c.contact_id).trim()));
+    const friendUsers = new Set((state.chats || []).map(c => (c.username || '').toLowerCase().trim()));
+    const myId = String(state.me.id).trim();
+    const myUser = (state.me.username || '').toLowerCase().trim();
+
     return raw
-      .filter(s => s && s.id && s.createdAt > cutoff && (typeof s.text === 'string' || s.mediaUrl))
+      .filter(s => {
+        if (!s || !s.id || s.createdAt <= cutoff || (!s.text && !s.mediaUrl)) return false;
+        const sId = s.userId ? String(s.userId).trim() : null;
+        const sUser = (s.username || '').toLowerCase().trim();
+        const isMine = (sId && sId === myId) || (sUser && sUser === myUser);
+        const isFriend = (sId && friendIds.has(sId)) || (sUser && friendUsers.has(sUser));
+        return isMine || isFriend;
+      })
       .sort((a, b) => b.createdAt - a.createdAt);
   } catch {
     return [];
@@ -131,7 +153,13 @@ export function getStories() {
 /** Sadece geçerli kullanıcının aktif hikayeleri */
 export function getMyStories() {
   if (!state.me) return [];
-  return getStories().filter(s => s.userId === state.me.id || s.username === state.me.username);
+  const myId = String(state.me.id).trim();
+  const myUser = (state.me.username || '').toLowerCase().trim();
+  return getStories().filter(s => {
+    const sId = s.userId ? String(s.userId).trim() : null;
+    const sUser = (s.username || '').toLowerCase().trim();
+    return (sId && sId === myId) || (sUser && sUser === myUser);
+  });
 }
 
 /** Hikayeleri kullanıcı bazında tekilleştirip gruplar (Asla mükerrer grup oluşturmaz) */
@@ -178,9 +206,15 @@ export function getStoriesGroupedByUser() {
   return groups;
 }
 
-/** Gelen hikayeleri mevcut listeyle birleştirip kaydeder */
+/** Gelen hikayeleri mevcut listeyle birleştirip kaydeder (Yabancıların hikayeleri filtrelenir) */
 export function mergeStories(incoming) {
-  if (!Array.isArray(incoming) || !incoming.length) return false;
+  if (!state.me || !Array.isArray(incoming) || !incoming.length) return false;
+
+  const friendIds = new Set((state.chats || []).map(c => String(c.contact_id).trim()));
+  const friendUsers = new Set((state.chats || []).map(c => (c.username || '').toLowerCase().trim()));
+  const myId = String(state.me.id).trim();
+  const myUser = (state.me.username || '').toLowerCase().trim();
+
   const current = getStories();
   const map = new Map();
   current.forEach(s => map.set(s.id, s));
@@ -190,6 +224,14 @@ export function mergeStories(incoming) {
 
   incoming.forEach(st => {
     if (!st || !st.id || !st.createdAt || st.createdAt <= cutoff) return;
+    const sId = st.userId ? String(st.userId).trim() : null;
+    const sUser = (st.username || '').toLowerCase().trim();
+    const isMine = (sId && sId === myId) || (sUser && sUser === myUser);
+    const isFriend = (sId && friendIds.has(sId)) || (sUser && friendUsers.has(sUser));
+
+    // Yabancıların (arkadaş olmayanların) hikayelerini asla kabul etme
+    if (!isMine && !isFriend) return;
+
     if (!map.has(st.id)) {
       map.set(st.id, {
         id: st.id,
@@ -210,10 +252,13 @@ export function mergeStories(incoming) {
     const updated = Array.from(map.values())
       .filter(s => s.createdAt > cutoff)
       .sort((a, b) => b.createdAt - a.createdAt)
-      .slice(0, 100);
-    try {
-      localStorage.setItem(STORAGE_KEY, JSON.stringify(updated));
-    } catch {}
+      .slice(100);
+    const key = getStorageKey();
+    if (key) {
+      try {
+        localStorage.setItem(key, JSON.stringify(updated));
+      } catch {}
+    }
     bus.emit('stories:changed');
     return true;
   }
@@ -255,8 +300,11 @@ export function deleteStory(storyId) {
 /** Hikayeyi yerel depodan siler (diğer istemcilerden gelen sinyalde kullanılır) */
 export function deleteStoryLocally(storyId) {
   const current = getStories().filter(s => s.id !== storyId);
-  try {
-    localStorage.setItem(STORAGE_KEY, JSON.stringify(current));
-  } catch {}
+  const key = getStorageKey();
+  if (key) {
+    try {
+      localStorage.setItem(key, JSON.stringify(current));
+    } catch {}
+  }
   bus.emit('stories:changed');
 }

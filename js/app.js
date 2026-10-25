@@ -49,9 +49,9 @@ async function startApp(user) {
     startMessageRealtime(state.me);
     startPresence(state.me);
     initLiveCollab();
-    renderStoriesBar();
 
     await Promise.all([loadChats(), loadRequests()]);
+    renderStoriesBar();
     await markDelivered();
   } catch (err) {
     starting = null;
