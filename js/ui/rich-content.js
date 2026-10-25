@@ -7,6 +7,7 @@
 import { $, el } from '../utils.js';
 import { icon } from './icons.js';
 import { toast } from './toast.js';
+import { playFxSound, triggerParticleBurst, triggerEmojiRain, triggerScreenShake } from './fx.js';
 
 /* ---------------- 1. Eğik Çizgi (/) Komut Tanımları (#74) ---------------- */
 export const SLASH_COMMANDS = [
@@ -235,7 +236,12 @@ export function renderRichMessageBody(m, { meId, meUsername, onUpdateMessage, on
   // 2.9 Titreşim (Nudge) Rozeti (#57)
   if (working.startsWith('[NUDGE]')) {
     const nudgeEl = el('div', 'rc-nudge-card');
-    nudgeEl.innerHTML = `<span class="ico-inline">${icon('vibrate')} ${escapeHtml(working.replace('[NUDGE]', ''))}</span>`;
+    nudgeEl.innerHTML = `<span class="ico-inline rc-nudge-icon">${icon('vibrate')}</span> <b>${escapeHtml(working.replace('[NUDGE]', '') || 'Ekranı titretti!')}</b>`;
+    nudgeEl.title = 'Tekrar titretmek için dokun';
+    nudgeEl.addEventListener('click', (e) => {
+      e.stopPropagation();
+      triggerScreenShake();
+    });
     frag.append(nudgeEl);
     return frag;
   }
@@ -459,9 +465,20 @@ function buildGameWidget(game, meUsername, onSave, m, meId) {
   const grid = el('div', 'rc-xox-grid');
   board.forEach((cell, i) => {
     const isWinningCell = winningLine.includes(i);
-    const b = el('button', 'rc-xox-cell' + (cell ? ` val-${cell}` : '') + (isWinningCell ? ' winning-cell' : ''));
+    const isJustPlaced = game.lastMove === i && !!cell;
+    const b = el(
+      'button',
+      'rc-xox-cell'
+        + (cell ? ` val-${cell}` : '')
+        + (isWinningCell ? ' winning-cell' : '')
+        + (isJustPlaced ? ' just-placed' : '')
+    );
     b.type = 'button';
-    b.textContent = cell || '';
+    if (cell) {
+      b.innerHTML = `<span class="rc-xox-stone">${cell}</span>`;
+    } else {
+      b.textContent = '';
+    }
 
     // Sadece boşsa, oyun bitmemişse VE sıra bu oyuncudaysa tıklanabilir
     const canPlay = !cell && !winner && isMyTurn;
@@ -483,8 +500,21 @@ function buildGameWidget(game, meUsername, onSave, m, meId) {
       }
       if (board[i]) return;
 
+      // Taş koyma mikro-animasyonu & dokunsal geri bildirim
+      try {
+        const rect = b.getBoundingClientRect();
+        triggerParticleBurst(
+          rect.left + rect.width / 2,
+          rect.top + rect.height / 2,
+          mySymbol === 'X' ? '#00e5b3' : '#38bdf8'
+        );
+        if (navigator.vibrate) navigator.vibrate(18);
+      } catch {}
+      playFxSound('out');
+
       const next = structuredClone(game);
       next.board[i] = mySymbol;
+      next.lastMove = i;
       next.playerX = playerX || meUsername;
       if (mySymbol === 'O' && !next.playerO) {
         next.playerO = meUsername;
@@ -497,6 +527,9 @@ function buildGameWidget(game, meUsername, onSave, m, meId) {
         const newScoreX = scoreX + (nextWin.winner === 'X' ? 1 : 0);
         const newScoreO = scoreO + (nextWin.winner === 'O' ? 1 : 0);
         next.score = { X: newScoreX, O: newScoreO };
+        if (nextWin.winner === 'X' || nextWin.winner === 'O') {
+          triggerEmojiRain(['🏆', '🎉', '✨', '🔥']);
+        }
       } else {
         next.turn = mySymbol === 'X' ? 'O' : 'X';
         next.score = { X: scoreX, O: scoreO };

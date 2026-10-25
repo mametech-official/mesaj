@@ -1,4 +1,4 @@
-﻿/* =====================================================================
+/* =====================================================================
  *  components.css — avatar, ikon düğmesi, rozet, lightbox, toast, modallar (v5)
  * ===================================================================== */
 
@@ -81,11 +81,16 @@
   box-shadow: 0 4px 12px rgba(0, 0, 0, 0.35), inset 0 1px 1px rgba(255, 255, 255, 0.18);
   transition: transform 0.2s var(--ease), box-shadow 0.2s;
 }
-.avatar img {
+.avatar img, .avatar img.avatar-img {
+  position: absolute;
+  inset: 0;
   width: 100%;
   height: 100%;
   object-fit: cover;
+  object-position: center center;
   display: block;
+  border-radius: 50%;
+  transition: transform 0.2s ease, object-position 0.2s ease;
 }
 .avatar.sm { width: 42px; height: 42px; font-size: 15px; }
 
@@ -1387,3 +1392,71 @@ svg.ico circle.ico-fill {
 }
 .lb-toolbar button:hover { background: rgba(0, 217, 166, 0.28); }
 #lightbox img { transition: transform 0.2s var(--ease); }
+
+
+/* =====================================================================
+ *  İskelet Ekran (Skeleton Loading) & Açılır Pencere (Modal) Akıcı Animasyonları
+ * ===================================================================== */
+.msg-skeleton-list {
+  display: flex;
+  flex-direction: column;
+  gap: 10px;
+  padding: 8px 0;
+  width: 100%;
+}
+.skeleton-row {
+  display: flex;
+  width: 100%;
+}
+.skeleton-row.in { justify-content: flex-start; }
+.skeleton-row.out { justify-content: flex-end; }
+.skeleton-bubble {
+  border-radius: 14px;
+  background: linear-gradient(90deg, rgba(255, 255, 255, 0.05) 0%, rgba(255, 255, 255, 0.12) 50%, rgba(255, 255, 255, 0.05) 100%);
+  background-size: 200% 100%;
+  animation: skeletonShimmer 1.4s infinite ease-in-out;
+  box-shadow: 0 4px 14px rgba(0, 0, 0, 0.2);
+}
+@keyframes skeletonShimmer {
+  0% { background-position: 200% 0; }
+  100% { background-position: -200% 0; }
+}
+
+/* Modalların Yumuşak Açılış ve Kapanış Geçişleri (Fade + Spring Scale) */
+.v6-modal, #profile-modal, #wallpaper-modal, #lightbox {
+  opacity: 0;
+  visibility: hidden;
+  pointer-events: none;
+  transition: opacity 0.24s cubic-bezier(0.22, 1, 0.36, 1), visibility 0.24s;
+}
+.v6-modal.open, #profile-modal.open, #lightbox.open {
+  opacity: 1;
+  visibility: visible;
+  pointer-events: auto;
+  display: grid;
+}
+#wallpaper-modal.open {
+  opacity: 1;
+  visibility: visible;
+  pointer-events: auto;
+  display: flex;
+}
+.v6-modal-card, .profile-card {
+  transform: scale(0.9) translateY(14px);
+  opacity: 0;
+  transition: transform 0.26s cubic-bezier(0.18, 0.89, 0.32, 1.18), opacity 0.22s ease;
+}
+.v6-modal.open .v6-modal-card,
+#profile-modal.open .profile-card {
+  transform: scale(1) translateY(0);
+  opacity: 1;
+}
+.wallpaper-card {
+  transform: translateX(36px) scale(0.94);
+  opacity: 0;
+  transition: transform 0.26s cubic-bezier(0.18, 0.89, 0.32, 1.15), opacity 0.22s ease;
+}
+#wallpaper-modal.open .wallpaper-card {
+  transform: translateX(0) scale(1);
+  opacity: 1;
+}

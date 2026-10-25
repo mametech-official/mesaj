@@ -28,10 +28,11 @@ import { getSmartReplies } from './rich-content.js';
 import { openMediaGalleryModal } from './media-studio.js';
 import { startCall, sendNudgeBroadcast, openWhiteboardModal, sendCollabBroadcast } from './live-collab.js';
 import { openChatAnalyticsModal } from './command-palette.js';
-import { playFxSound, checkAndTriggerCelebration, toggleZenMode } from './fx.js';
+import { playFxSound, checkAndTriggerCelebration, toggleZenMode, triggerScreenShake } from './fx.js';
+import { openLightbox } from './lightbox.js';
 import { icon } from './icons.js';
 import { toast } from './toast.js';
-import { getLocalMessages, saveLocalMessages, saveSingleLocalMessage, deleteLocalMessage } from '../services/db.js';
+import { getLocalMessages, getSyncCachedMessages, saveLocalMessages, saveSingleLocalMessage, deleteLocalMessage } from '../services/db.js';
 
 const GROUP_GAP_MS = 5 * 60 * 1000;
 
@@ -151,10 +152,29 @@ export function initChatView() {
   });
 }
 
+function triggerNudgeAction() {
+  if (!state.activeChat) return;
+  if (!state.activeChat.isSelf) {
+    sendNudgeBroadcast(state.activeChat.id);
+    sendPayload({ content: '[NUDGE]⚡ Ekranı titretti!' }).catch(() => {});
+    toast(`@${state.activeChat.username} kişisine titreşim gönderildi!`);
+  } else {
+    triggerScreenShake();
+    toast('Ekran titretildi!');
+  }
+}
+
 function ensureV6HeaderAndBanners() {
   const head = document.querySelector('#chat-view .chat-head');
   const searchBtn = $('chat-search-btn');
-  if (head && searchBtn && !$('chat-voice-call-btn')) {
+  const themeBtn = $('chat-theme-btn');
+  const moreBtn = $('chat-more-btn');
+
+  // Üst barı sadeleştir: Arama ve Tema butonlarını 3 nokta (⋮) menüsüne taşı
+  if (searchBtn) searchBtn.hidden = true;
+  if (themeBtn) themeBtn.hidden = true;
+
+  if (head && moreBtn && !$('chat-voice-call-btn')) {
     const callBtn = el('button', 'icon-btn v6-head-btn');
     callBtn.innerHTML = icon('phone');
     callBtn.type = 'button';
@@ -169,32 +189,8 @@ function ensureV6HeaderAndBanners() {
     videoBtn.title = 'Görüntülü Arama (#52)';
     videoBtn.addEventListener('click', () => { if (state.activeChat) startCall(state.activeChat, true); });
 
-    const nudgeBtn = el('button', 'icon-btn v6-head-btn');
-    nudgeBtn.innerHTML = icon('vibrate');
-    nudgeBtn.type = 'button';
-    nudgeBtn.id = 'chat-nudge-btn';
-    nudgeBtn.title = 'Ekranı Titret (Nudge #57)';
-    nudgeBtn.addEventListener('click', () => {
-      if (state.activeChat) {
-        sendNudgeBroadcast(state.activeChat.id);
-        toast(`@${state.activeChat.username} kişisine titreşim gönderildi!`);
-      }
-    });
-
-    const zenBtn = el('button', 'icon-btn v6-head-btn');
-    zenBtn.innerHTML = icon('leaf');
-    zenBtn.type = 'button';
-    zenBtn.id = 'chat-zen-btn';
-    zenBtn.title = 'Zen Odak Modu (Sol Paneli Gizle/Göster #100)';
-    zenBtn.addEventListener('click', () => {
-      const z = toggleZenMode();
-      toast(z ? 'Zen odak modu aktif' : 'Normal görünüm');
-    });
-
-    head.insertBefore(callBtn, searchBtn);
-    head.insertBefore(videoBtn, searchBtn);
-    head.insertBefore(nudgeBtn, searchBtn);
-    head.insertBefore(zenBtn, searchBtn);
+    head.insertBefore(callBtn, moreBtn);
+    head.insertBefore(videoBtn, moreBtn);
   }
 
   // Sabitlenmiş Mesaj Çubuğu (#35)
@@ -242,7 +238,7 @@ function initChatMenu() {
   const menu = $('chat-header-menu');
   if (!btn || !menu) return;
 
-  // V6 Menü Seçeneklerini Ekle (#44, #55, #86, #89, #93)
+  // V6 Menü Seçeneklerini Ekle (#44, #55, #57, #86, #89, #93, #100)
   if (!menu.dataset.v6Ready) {
     menu.dataset.v6Ready = '1';
 
@@ -256,8 +252,25 @@ function initChatMenu() {
       }
     });
 
+    const nudgeMenuBtn = el('button', '');
+    nudgeMenuBtn.innerHTML = `${icon('vibrate')} Ekranı Titret (Nudge)`;
+    nudgeMenuBtn.type = 'button';
+    nudgeMenuBtn.addEventListener('click', () => {
+      menu.hidden = true;
+      triggerNudgeAction();
+    });
+
+    const zenMenuBtn = el('button', '');
+    zenMenuBtn.innerHTML = `${icon('leaf')} Zen Odak Modu`;
+    zenMenuBtn.type = 'button';
+    zenMenuBtn.addEventListener('click', () => {
+      menu.hidden = true;
+      const z = toggleZenMode();
+      toast(z ? 'Zen odak modu aktif' : 'Normal görünüm');
+    });
+
     const galleryBtn = el('button', '');
-    galleryBtn.innerHTML = `${icon('image')} Medya, Belge & Link Galerisi`;
+    galleryBtn.innerHTML = `${icon('image')} Medya, Belge &amp; Link Galerisi`;
     galleryBtn.type = 'button';
     galleryBtn.addEventListener('click', () => {
       menu.hidden = true;
@@ -273,7 +286,7 @@ function initChatMenu() {
     });
 
     const statsBtn = el('button', '');
-    statsBtn.innerHTML = `${icon('chart')} İstatistik, E2EE & Dışa Aktar`;
+    statsBtn.innerHTML = `${icon('chart')} İstatistik, E2EE &amp; Dışa Aktar`;
     statsBtn.type = 'button';
     statsBtn.addEventListener('click', () => {
       menu.hidden = true;
@@ -291,7 +304,9 @@ function initChatMenu() {
       toast('Sohbet ekranı temizlendi.');
     });
 
+    menu.prepend(nudgeMenuBtn);
     menu.prepend(infoBtn);
+    menu.insertBefore(zenMenuBtn, $('menu-item-block'));
     menu.insertBefore(galleryBtn, $('menu-item-block'));
     menu.insertBefore(wbBtn, $('menu-item-block'));
     menu.insertBefore(statsBtn, $('menu-item-block'));
@@ -422,6 +437,50 @@ function updateSmartReplies() {
 }
 
 /* =====================================================================
+ *  İskelet Ekran (Skeleton Loading) & Akıllı Mesaj Fark (Diff) Kontrolü
+ * ===================================================================== */
+function renderSkeletonLoading() {
+  const b = box();
+  if (!b) return;
+  b.replaceChildren();
+  const wrap = el('div', 'msg-skeleton-list');
+  const widths = [
+    { dir: 'in',  w: '54%', h: '40px' },
+    { dir: 'out', w: '46%', h: '38px' },
+    { dir: 'in',  w: '68%', h: '52px' },
+    { dir: 'out', w: '60%', h: '42px' },
+    { dir: 'in',  w: '42%', h: '38px' },
+    { dir: 'out', w: '52%', h: '40px' },
+  ];
+  widths.forEach((item, idx) => {
+    const row = el('div', `msg-row ${item.dir} first skeleton-row`);
+    const sk = el('div', 'skeleton-bubble');
+    sk.style.width = item.w;
+    sk.style.height = item.h;
+    sk.style.animationDelay = `${idx * 0.06}s`;
+    row.appendChild(sk);
+    wrap.appendChild(row);
+  });
+  b.appendChild(wrap);
+}
+
+function isSameMessageList(a, b) {
+  if (!Array.isArray(a) || !Array.isArray(b)) return false;
+  if (!a.length || a.length !== b.length) return false;
+  for (let i = 0; i < a.length; i++) {
+    if (
+      a[i].id !== b[i].id ||
+      a[i].content !== b[i].content ||
+      a[i].is_deleted !== b[i].is_deleted ||
+      a[i].edited_at !== b[i].edited_at
+    ) {
+      return false;
+    }
+  }
+  return true;
+}
+
+/* =====================================================================
  *  Sohbet açma / kapama (Kendime Notlar #72 destekli)
  * ===================================================================== */
 export async function openChat(chat) {
@@ -456,21 +515,17 @@ export async function openChat(chat) {
     fetchProfile(chat.id).then((p) => {
       if (my === token && p) {
         if (p.about) state.activeChat.about = p.about;
-        if (p.avatar_path) state.activeChat.avatar_path = p.avatar_path;
+        if (p.avatar_path) {
+          state.activeChat.avatar_path = p.avatar_path;
+          setAvatar($('chat-avatar'), chat.username, getAvatarUrl(p.avatar_path));
+        }
         updateHeader();
       }
     }).catch(() => {});
   }
 
-  $('empty-state').hidden = true;
-  const view = $('chat-view');
-  view.hidden = false;
-  view.classList.remove('chat-slide-in');
-  void view.offsetWidth;
-  view.classList.add('chat-slide-in');
-  $('app').classList.add('chat-open');
-  bus.emit('chat:active');
-
+  // 1. ÖNCE mesajları senkron olarak (RAM veya LocalStorage'dan 0.00ms'de) ekrana çiz,
+  //    böylece sayfa kayarken (slide-in) arka plan ASLA boş kalmaz!
   if (isSelf) {
     try {
       const savedNotes = JSON.parse(localStorage.getItem(`wa_self_notes_${state.me.id}`) || '[]');
@@ -484,48 +539,83 @@ export async function openChat(chat) {
       loaded = [];
       renderAll();
     }
-    return;
+  } else {
+    const cached = chatCache.get(chat.id);
+    const syncLocal = (!cached || !cached.messages.length) ? getSyncCachedMessages(chat.id) : null;
+
+    if (cached && cached.messages.length) {
+      loaded = [...cached.messages];
+      loadedIds = new Set(loaded.map((m) => m.id));
+      hasMore = cached.hasMore;
+      renderAll();
+      scrollToBottom();
+    } else if (syncLocal && syncLocal.length) {
+      loaded = [...syncLocal];
+      loadedIds = new Set(loaded.map((m) => m.id));
+      hasMore = syncLocal.length >= CONFIG.PAGE_SIZE;
+      chatCache.set(chat.id, { messages: [...loaded], hasMore });
+      renderAll();
+      scrollToBottom();
+    } else {
+      // İlk kez açılan sohbette boş ekran yerine modern İskelet Ekran (Skeleton Loading) göster
+      renderSkeletonLoading();
+    }
   }
 
-  // Önbellekte varsa (RAM veya IndexedDB) 0ms gecikmeyle anında ekrana çiz
-  const cached = chatCache.get(chat.id);
-  if (cached && cached.messages.length) {
-    loaded = [...cached.messages];
-    loadedIds = new Set(loaded.map((m) => m.id));
-    hasMore = cached.hasMore;
-    renderAll();
-    scrollToBottom();
-  } else {
+  // 2. Mesajlar DOM'a yerleştirildikten hemen sonra kayma (slide-in) animasyonunu başlat
+  $('empty-state').hidden = true;
+  const view = $('chat-view');
+  view.hidden = false;
+  view.classList.remove('chat-slide-in');
+  void view.offsetWidth;
+  view.classList.add('chat-slide-in');
+  $('app').classList.add('chat-open');
+  if (window.__pushNavState) window.__pushNavState('chat');
+  bus.emit('chat:active');
+
+  if (isSelf) return;
+
+  // Eğer senkron önbellekte yoksa IndexedDB'den kontrol et
+  if (!loaded.length) {
     try {
       const localMsgs = await getLocalMessages(chat.id);
-      if (my === token && localMsgs && localMsgs.length) {
+      if (my === token && localMsgs && localMsgs.length && !loaded.length) {
         loaded = [...localMsgs];
         loadedIds = new Set(loaded.map((m) => m.id));
         hasMore = localMsgs.length >= CONFIG.PAGE_SIZE;
         chatCache.set(chat.id, { messages: [...loaded], hasMore });
         renderAll();
         scrollToBottom();
-      } else {
-        box().replaceChildren(el('div', 'no-msg', 'Yükleniyor…'));
       }
-    } catch {
-      box().replaceChildren(el('div', 'no-msg', 'Yükleniyor…'));
-    }
+    } catch {}
   }
 
+  // 3. Arka planda sunucudan canlı verileri çek (Ekranı silmeden akıllı güncelle!)
   try {
     const rows = await fetchMessages(state.me.id, chat.id);
     if (my !== token) return;
+    const prevLoaded = [...loaded];
+    const wasSame = isSameMessageList(prevLoaded, rows);
+
     loaded = rows;
     loadedIds = new Set(rows.map((m) => m.id));
     hasMore = rows.length === CONFIG.PAGE_SIZE;
     chatCache.set(chat.id, { messages: [...rows], hasMore });
     saveLocalMessages(chat.id, rows).catch(() => {});
 
-    renderAll();
-    scrollToBottom();
+    if (!wasSame) {
+      // Sadece yeni mesaj eklendiyse veya ilk yüklemeyse DOM'u güncelle
+      renderAll();
+      scrollToBottom();
+    } else {
+      // Mesajlar önbellekle birebir aynıysa DOM'u silme (titreme/boşluk olmaz), sadece okundu tiklerini güncelle
+      rows.forEach((m) => {
+        const row = box().querySelector(`.msg-row[data-id="${m.id}"]`);
+        if (row) updateRowTick(row, m);
+      });
+    }
     updateSmartReplies();
-    if (window.matchMedia('(min-width: 761px)').matches) composer.focus();
+    if (window.matchMedia('(min-width: 781px)').matches) composer.focus();
 
     // Tepkiler, yıldızlar ve okundu bilgisi arka planda bloklamadan yüklensin
     if (rows.length) {
@@ -560,23 +650,26 @@ export async function openChat(chat) {
 }
 
 export function closeChat() {
+  if (!state.activeChat && !$('app')?.classList.contains('chat-open')) return;
   token++;
   stopAllAudio();
   composer.reset();
   resetChatSearch();
   state.activeChat = null;
-  loaded = []; loadedIds = new Set();
-  starredSet.clear();
-  reactionsMap.clear();
   $('app').classList.remove('chat-open');
   bus.emit('chat:active');
 
+  // Kayma animasyonu (250ms) tamamlanana kadar mesajları ekranda tut, bitince temizle
   setTimeout(() => {
     if (!state.activeChat) {
+      loaded = [];
+      loadedIds = new Set();
+      starredSet.clear();
+      reactionsMap.clear();
       $('chat-view').hidden = true;
       $('empty-state').hidden = false;
     }
-  }, 180);
+  }, 260);
 }
 
 export function resetChatView() {
@@ -676,7 +769,7 @@ export function openContactInfoModal(chat) {
 
     $('ci-avatar').addEventListener('click', () => {
       if (state.activeChat?.avatar_path) {
-        openMediaPreview({ image_path: state.activeChat.avatar_path });
+        openLightbox(getAvatarUrl(state.activeChat.avatar_path));
       }
     });
 
@@ -710,6 +803,7 @@ export function openContactInfoModal(chat) {
   $('ci-about').textContent = aboutText;
 
   modal.classList.add('open');
+  if (window.__pushNavState) window.__pushNavState('modal');
 }
 
 function renderTypingBubble() {
@@ -1014,6 +1108,22 @@ function setUnseen(n) {
 async function sendPayload(payload) {
   if (!state.activeChat) return;
   const targetChatId = state.activeChat.id;
+
+  // Gönder butonu mikro-animasyonu ve dokunsal geri bildirim
+  const sendBtnEl = $('send-btn');
+  if (sendBtnEl) {
+    sendBtnEl.classList.remove('send-launch');
+    void sendBtnEl.offsetWidth;
+    sendBtnEl.classList.add('send-launch');
+  }
+  try { if (navigator.vibrate) navigator.vibrate(12); } catch {}
+
+  // Titreşim mesajı gönderildiğinde ekranı salla ve broadcast ilet
+  if (payload.content && payload.content.startsWith('[NUDGE]')) {
+    triggerScreenShake();
+    if (!state.activeChat.isSelf) sendNudgeBroadcast(targetChatId);
+  }
+
   if (state.activeChat.isSelf) {
     const fakeMsg = {
       id: 'self_' + Date.now(),
@@ -1129,6 +1239,9 @@ async function handleEditMessage(m, newText) {
  *  Realtime olayları
  * ===================================================================== */
 function onRealtimeInsert(m) {
+  if (m.content && m.content.startsWith('[NUDGE]') && m.sender_id !== state.me?.id) {
+    triggerScreenShake();
+  }
   const isCurrentChat = state.activeChat && (m.sender_id === state.activeChat.id || m.receiver_id === state.activeChat.id);
 
   if (isCurrentChat) {

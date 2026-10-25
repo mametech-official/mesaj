@@ -1,6 +1,6 @@
 /* =====================================================================
- *  services/db.js — Yerel IndexedDB Veritabanı (WhatsApp Hızı / Offline-First)
- *  Sohbetleri ve mesajları telefon/tarayıcı hafızasında saklar (0ms açılış).
+ *  services/db.js — Yerel IndexedDB + Senkron LocalStorage Önbelleği
+ *  (WhatsApp Hızı / Offline-First: 0.00ms anında sohbet ve mesaj açılışı)
  * ===================================================================== */
 
 const DB_NAME = 'mesaj_local_db_v1';
@@ -18,11 +18,9 @@ function openDB() {
 
       req.onupgradeneeded = (e) => {
         const db = e.target.result;
-        // 1. Sohbet listesi tablosu
         if (!db.objectStoreNames.contains('chats')) {
           db.createObjectStore('chats', { keyPath: 'contact_id' });
         }
-        // 2. Mesajlar tablosu (Hızlı sohbet içi arama ve sıralama)
         if (!db.objectStoreNames.contains('messages')) {
           const msgStore = db.createObjectStore('messages', { keyPath: 'id' });
           msgStore.createIndex('chat_id', 'chat_id', { unique: false });
@@ -43,13 +41,21 @@ function openDB() {
 
 /* ---------------- 1. Sohbet Listesi İşlemleri (0ms Sidebar) ---------------- */
 
-export async function getLocalChats() {
-  const db = await openDB();
-  if (!db) {
-    try {
-      return JSON.parse(localStorage.getItem('wa_cached_chats') || '[]');
-    } catch { return []; }
+export function getSyncCachedChats() {
+  try {
+    const raw = localStorage.getItem('wa_cached_chats');
+    return raw ? JSON.parse(raw) : [];
+  } catch {
+    return [];
   }
+}
+
+export async function getLocalChats() {
+  const syncList = getSyncCachedChats();
+  if (syncList && syncList.length) return syncList;
+
+  const db = await openDB();
+  if (!db) return [];
 
   return new Promise((resolve) => {
     try {
@@ -67,7 +73,7 @@ export async function getLocalChats() {
 export async function saveLocalChats(chats) {
   if (!Array.isArray(chats) || !chats.length) return;
   try {
-    localStorage.setItem('wa_cached_chats', JSON.stringify(chats.slice(0, 40)));
+    localStorage.setItem('wa_cached_chats', JSON.stringify(chats.slice(0, 50)));
   } catch {}
 
   const db = await openDB();
@@ -82,15 +88,27 @@ export async function saveLocalChats(chats) {
   } catch {}
 }
 
-/* ---------------- 2. Mesaj İşlemleri (0ms Chat View) ---------------- */
+/* ---------------- 2. Mesaj İşlemleri (0ms Senkron + IndexedDB) ---------------- */
+
+/**
+ * 0.00ms senkron mesaj okuma — Promise/await beklemeden anında döner!
+ */
+export function getSyncCachedMessages(chatId) {
+  if (!chatId) return [];
+  try {
+    const raw = localStorage.getItem(`wa_cached_msgs_${chatId}`);
+    if (!raw) return [];
+    const parsed = JSON.parse(raw);
+    return Array.isArray(parsed) ? parsed : [];
+  } catch {
+    return [];
+  }
+}
 
 export async function getLocalMessages(chatId, limit = 80) {
+  const syncMsgs = getSyncCachedMessages(chatId);
   const db = await openDB();
-  if (!db) {
-    try {
-      return JSON.parse(localStorage.getItem(`wa_cached_msgs_${chatId}`) || '[]');
-    } catch { return []; }
-  }
+  if (!db) return syncMsgs.slice(-limit);
 
   return new Promise((resolve) => {
     try {
@@ -101,23 +119,34 @@ export async function getLocalMessages(chatId, limit = 80) {
 
       req.onsuccess = () => {
         const list = req.result || [];
+        if (!list.length && syncMsgs.length) {
+          resolve(syncMsgs.slice(-limit));
+          return;
+        }
         list.sort((a, b) => new Date(a.created_at) - new Date(b.created_at));
-        resolve(list.slice(-limit));
+        const sliced = list.slice(-limit);
+        try {
+          if (sliced.length) {
+            localStorage.setItem(`wa_cached_msgs_${chatId}`, JSON.stringify(sliced.slice(-60)));
+          }
+        } catch {}
+        resolve(sliced);
       };
-      req.onerror = () => resolve([]);
+      req.onerror = () => resolve(syncMsgs.slice(-limit));
     } catch {
-      resolve([]);
+      resolve(syncMsgs.slice(-limit));
     }
   });
 }
 
 export async function saveLocalMessages(chatId, messages) {
-  if (!chatId || !Array.isArray(messages) || !messages.length) return;
+  if (!chatId || !Array.isArray(messages)) return;
 
   try {
-    localStorage.setItem(`wa_cached_msgs_${chatId}`, JSON.stringify(messages.slice(-50)));
+    localStorage.setItem(`wa_cached_msgs_${chatId}`, JSON.stringify(messages.slice(-60)));
   } catch {}
 
+  if (!messages.length) return;
   const db = await openDB();
   if (!db) return;
 
@@ -134,6 +163,15 @@ export async function saveLocalMessages(chatId, messages) {
 
 export async function saveSingleLocalMessage(chatId, message) {
   if (!chatId || !message || !message.id) return;
+
+  try {
+    const existing = getSyncCachedMessages(chatId);
+    const idx = existing.findIndex((x) => x.id === message.id);
+    if (idx >= 0) existing[idx] = message;
+    else existing.push(message);
+    localStorage.setItem(`wa_cached_msgs_${chatId}`, JSON.stringify(existing.slice(-60)));
+  } catch {}
+
   const db = await openDB();
   if (!db) return;
 

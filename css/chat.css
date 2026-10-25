@@ -1,4 +1,4 @@
-﻿/* =====================================================================
+/* =====================================================================
  *  chat.css — sohbet alanı, 3B balonlar, cam composer, boş ekran (v5)
  * ===================================================================== */
 #chat {
@@ -1215,7 +1215,7 @@
 #attach-menu button:hover { background: rgba(255, 255, 255, 0.08); }
 #attach-menu button svg { width: 18px; height: 18px; fill: var(--accent-bright); }
 
-/* Mobil Uyumluluk & Donanım Hızlandırmalı Akıcı Geçişler (WhatsApp/iOS Hissiyatı) */
+/* Mobil Uyumluluk & Donanım Hızlandırmalı Akıcı Geçişler (WhatsApp/iOS Hissiyatı - 260ms Yay) */
 @media (max-width: 780px) {
   #app {
     position: relative;
@@ -1231,7 +1231,8 @@
     width: 100%;
     height: 100%;
     transform: translate3d(0, 0, 0);
-    transition: transform 0.19s cubic-bezier(0.1, 0.9, 0.2, 1), opacity 0.19s ease;
+    transition: transform 0.26s cubic-bezier(0.22, 1, 0.36, 1), opacity 0.24s ease;
+    will-change: transform, opacity;
     z-index: 1;
     display: flex !important;
   }
@@ -1241,22 +1242,27 @@
     width: 100%;
     height: 100%;
     transform: translate3d(100%, 0, 0);
-    transition: transform 0.19s cubic-bezier(0.1, 0.9, 0.2, 1);
+    transition: transform 0.26s cubic-bezier(0.22, 1, 0.36, 1);
+    will-change: transform;
     z-index: 2;
     display: flex !important;
     pointer-events: none;
     box-shadow: -14px 0 35px rgba(0, 0, 0, 0.7);
   }
   #app.chat-open #sidebar {
-    transform: translate3d(-20%, 0, 0);
-    opacity: 0.65;
+    transform: translate3d(-24%, 0, 0) scale(0.97);
+    opacity: 0.55;
     pointer-events: none;
   }
   #app.chat-open #chat {
     transform: translate3d(0, 0, 0);
     pointer-events: auto;
   }
-  #back-btn { display: grid; }
+  #back-btn { display: grid; margin-right: -4px; }
+  .chat-head { padding: 0 10px; gap: 8px; }
+  .chat-head .info { min-width: 0; flex: 1; }
+  .chat-head .status .presence-text { flex-shrink: 0; }
+  .chat-head .v6-head-btn, .chat-head .icon-btn { width: 34px; height: 34px; }
   #messages { padding: 14px 4%; }
   .bubble { max-width: 84%; }
   .mp-bottom { padding: 12px 16px; }
@@ -1970,4 +1976,64 @@
   border-radius: 10px;
   padding: 10px 12px;
   border: 1px solid rgba(255, 255, 255, 0.05);
+}
+
+
+/* XOX Taş Koyma Mikro-Animasyonu */
+@keyframes xoxStonePop {
+  0% { transform: scale(0.3) rotate(-15deg); opacity: 0; }
+  70% { transform: scale(1.22) rotate(4deg); }
+  100% { transform: scale(1) rotate(0deg); opacity: 1; }
+}
+.rc-xox-cell.just-placed .rc-xox-stone {
+  display: inline-block;
+  animation: xoxStonePop 0.32s cubic-bezier(0.18, 0.89, 0.32, 1.28) forwards;
+}
+.rc-xox-cell.just-placed {
+  box-shadow: 0 0 16px var(--accent-bright);
+  border-color: var(--accent-bright);
+}
+
+/* Titreşim (Nudge) Kartı ve Ekran Parlaması */
+.rc-nudge-card {
+  display: inline-flex;
+  align-items: center;
+  gap: 8px;
+  padding: 8px 14px;
+  border-radius: 12px;
+  background: linear-gradient(135deg, rgba(251, 191, 36, 0.22) 0%, rgba(245, 158, 11, 0.12) 100%);
+  border: 1px solid rgba(251, 191, 36, 0.45);
+  color: #fbbf24;
+  font-size: 13.5px;
+  font-weight: 700;
+  cursor: pointer;
+  transition: transform 0.15s, background 0.15s;
+  box-shadow: 0 4px 14px rgba(245, 158, 11, 0.25);
+}
+.rc-nudge-card:hover {
+  transform: scale(1.03);
+  background: rgba(251, 191, 36, 0.32);
+}
+.rc-nudge-icon svg.ico {
+  stroke: #fbbf24;
+  animation: pulse 1s infinite;
+}
+@keyframes appNudgeFlash {
+  0%, 100% { outline: 0px solid transparent; }
+  25% { outline: 4px solid rgba(251, 191, 36, 0.85); box-shadow: inset 0 0 40px rgba(251, 191, 36, 0.35); }
+  50% { outline: 2px solid rgba(0, 229, 179, 0.7); box-shadow: inset 0 0 20px rgba(0, 229, 179, 0.25); }
+}
+#app.fx-nudge-flash {
+  animation: appNudgeFlash 0.65s ease;
+}
+
+/* Gönder Butonu Yaylanma ve Fırlatma Efekti */
+@keyframes sendPulse {
+  0% { transform: scale(1); }
+  40% { transform: scale(0.82) rotate(-8deg); }
+  75% { transform: scale(1.15) rotate(4deg); }
+  100% { transform: scale(1) rotate(0deg); }
+}
+.action-wrap #send-btn.send-launch {
+  animation: sendPulse 0.32s cubic-bezier(0.18, 0.89, 0.32, 1.28) forwards;
 }

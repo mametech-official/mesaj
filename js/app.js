@@ -1,7 +1,7 @@
 /* =====================================================================
  *  app.js — uygulama girişi: modülleri başlatır, oturum yaşam döngüsünü yönetir
  * ===================================================================== */
-import { $, setAvatar, trErr } from './utils.js';
+import { $, setAvatar, trErr, centerCropAvatarFile } from './utils.js';
 import { state, bus, resetState } from './state.js';
 import { onAuthChange, signOut } from './services/auth.js';
 import { fetchProfile, updateProfileAvatar } from './services/profiles.js';
@@ -12,17 +12,17 @@ import { markDelivered } from './services/messages.js';
 import { hydrateIcons } from './ui/icons.js';
 import { showScreen } from './ui/screens.js';
 import { toast } from './ui/toast.js';
-import { initLightbox } from './ui/lightbox.js';
+import { initLightbox, closeLightbox } from './ui/lightbox.js';
 import { initWallpaperPicker, openWallpaperPicker } from './ui/wallpaper-picker.js';
-import { initProfileModal, openProfileModal } from './ui/profile-modal.js';
+import { initProfileModal, openProfileModal, closeProfileModal } from './ui/profile-modal.js';
 import { initLiveBackgrounds } from './ui/canvas-bg.js';
 import { initClickRipples, init3DParallaxCards, initPrivacyShield, updateFaviconBadge } from './ui/fx.js';
 import { initLiveCollab, stopLiveCollab } from './ui/live-collab.js';
 import { initCommandPalette, openCommandPalette, renderStoriesBar } from './ui/command-palette.js';
 import { requestNotificationPermission } from './services/notifications.js';
 import { initAuthView, resetAuthView } from './ui/auth-view.js';
-import { initSidebar, loadChats, loadRequests, resetSidebar } from './ui/sidebar.js';
-import { initChatView, openChat, resetChatView } from './ui/chat-view.js';
+import { initSidebar, loadChats, loadRequests, resetSidebar, handleSidebarBack } from './ui/sidebar.js';
+import { initChatView, openChat, resetChatView, closeChat } from './ui/chat-view.js';
 
 let starting = null;
 
@@ -80,7 +80,7 @@ function stopApp() {
   showScreen('auth');
 }
 
-/* ---------------- Profil Fotoğrafı Değiştirme ---------------- */
+/* ---------------- Profil Fotoğrafı Değiştirme (centerCrop Destekli) ---------------- */
 function initAvatarUpload() {
   const wrap = $('me-avatar-wrap');
   const input = $('avatar-input');
@@ -95,9 +95,10 @@ function initAvatarUpload() {
     const err = validateAvatar(file);
     if (err) { toast(err); return; }
 
-    toast('Profil resmi yükleniyor…');
+    toast('Profil resmi optimize ediliyor ve yükleniyor…');
     try {
-      const path = await uploadAvatar(state.me.id, file);
+      const croppedFile = await centerCropAvatarFile(file);
+      const path = await uploadAvatar(state.me.id, croppedFile);
       await updateProfileAvatar(state.me.id, path);
       state.me.avatar_path = path;
       updateMeAvatarUI();
@@ -106,6 +107,99 @@ function initAvatarUpload() {
     } catch (uploadErr) {
       toast('Resim yüklenemedi: ' + trErr(uploadErr));
     }
+  });
+}
+
+/* ---------------- Navigasyon Yığını (Backstack) & Android Geri Tuşu Yönetimi ---------------- */
+function initBackNavigationStack() {
+  window.__pushNavState = (name) => {
+    try {
+      history.pushState({ mesajNav: name || 'screen', t: Date.now() }, '');
+    } catch {}
+  };
+
+  window.__handleBackNavigation = (fromPopState = false) => {
+    // 1. Tam ekran Lightbox
+    const lb = $('lightbox');
+    if (lb && lb.classList.contains('open')) {
+      closeLightbox();
+      return true;
+    }
+
+    // 2. Medya önizleme çekmecesi
+    const mp = $('media-preview');
+    if (mp && mp.classList.contains('open')) {
+      mp.classList.remove('open');
+      return true;
+    }
+
+    // 3. Başlık menüsü, ek menüsü veya mesaj menüleri
+    const headMenu = $('chat-header-menu');
+    if (headMenu && !headMenu.hidden) {
+      headMenu.hidden = true;
+      return true;
+    }
+    const attachMenu = $('attach-menu');
+    if (attachMenu && !attachMenu.hidden) {
+      attachMenu.hidden = true;
+      return true;
+    }
+    const openMsgMenu = document.querySelector('.msg-menu:not([hidden])');
+    if (openMsgMenu) {
+      openMsgMenu.hidden = true;
+      return true;
+    }
+
+    // 4. Açık bir v6 modal (Kişi Bilgisi, Komut Paleti, Galeri, Çizim Tahtası vb.)
+    const openV6Modal = document.querySelector('.v6-modal.open');
+    if (openV6Modal) {
+      openV6Modal.classList.remove('open');
+      return true;
+    }
+
+    // 5. Duvar Kağıdı / Tema Stüdyosu modalı
+    const wpModal = $('wallpaper-modal');
+    if (wpModal && wpModal.classList.contains('open')) {
+      wpModal.classList.remove('open');
+      return true;
+    }
+
+    // 6. Profil & Ayarlar modalı
+    const profModal = $('profile-modal');
+    if (profModal && profModal.classList.contains('open')) {
+      closeProfileModal();
+      return true;
+    }
+
+    // 7. Sohbet içi arama çubuğu
+    const searchBar = $('chat-search-bar');
+    if (searchBar && !searchBar.hidden) {
+      searchBar.hidden = true;
+      const inp = $('search-input-chat');
+      if (inp) inp.value = '';
+      document.querySelectorAll('.msg-row.search-matched, .msg-row.search-active').forEach(r => {
+        r.classList.remove('search-matched', 'search-active');
+      });
+      return true;
+    }
+
+    // 8. Sohbet ekranındayken telefonun geri tuşuna basıldığında sohbet listesine dön!
+    if (state.activeChat || $('app')?.classList.contains('chat-open')) {
+      closeChat();
+      return true;
+    }
+
+    // 9. Sol panel arama veya filtreler aktifse ana listeye dön
+    if (handleSidebarBack()) {
+      return true;
+    }
+
+    // 10. Ana listedeyiz (Android uygulamayı arka plana alabilir)
+    return false;
+  };
+
+  window.addEventListener('popstate', () => {
+    window.__handleBackNavigation(true);
   });
 }
 
@@ -144,6 +238,7 @@ function init() {
   initCommandPalette({ onOpenChat: openChat, onSelectChat: openChat });
   initAvatarUpload();
   initConnectionBanner();
+  initBackNavigationStack();
 
   $('logout-btn').addEventListener('click', () => signOut());
 

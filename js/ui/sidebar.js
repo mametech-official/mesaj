@@ -9,14 +9,14 @@ import {
   respondFriendRequest,
   cancelFriendRequest,
 } from '../services/chats.js';
-import { fetchStarred } from '../services/messages.js';
+import { fetchStarred, fetchMessages } from '../services/messages.js';
 import { getAvatarUrl } from '../services/storage.js';
 import { icon } from './icons.js';
 import { toast } from './toast.js';
 import { updateFaviconBadge } from './fx.js';
 import { renderStoriesBar } from './command-palette.js';
-import { getLocalChats, saveLocalChats, getLocalMessages } from '../services/db.js';
-import { setCachedChatMessages } from './chat-view.js';
+import { getLocalChats, saveLocalChats, getLocalMessages, getSyncCachedMessages, saveLocalMessages } from '../services/db.js';
+import { setCachedChatMessages, chatCache } from './chat-view.js';
 
 let onOpen = () => {};
 let query = '';
@@ -28,13 +28,52 @@ let renderQueued = false;
 function preloadRecentMessages(chats) {
   if (!Array.isArray(chats)) return;
   const top = chats.slice(0, 8);
-  for (const c of top) {
-    if (c && c.contact_id) {
-      getLocalMessages(c.contact_id, 35).then((msgs) => {
-        if (msgs && msgs.length) setCachedChatMessages(c.contact_id, msgs, msgs.length >= 35);
-      }).catch(() => {});
+  top.forEach((c, idx) => {
+    if (!c || !c.contact_id) return;
+    const cid = c.contact_id;
+
+    // 1. 0.00ms senkron LocalStorage önbelleğini RAM'e yükle
+    const syncMsgs = getSyncCachedMessages(cid);
+    if (syncMsgs && syncMsgs.length) {
+      setCachedChatMessages(cid, syncMsgs, syncMsgs.length >= 35);
     }
+
+    // 2. IndexedDB'den kontrol et ve ilk 6 aktif sohbeti arka planda sunucudan hazırla
+    getLocalMessages(cid, 50).then((msgs) => {
+      if (msgs && msgs.length) {
+        setCachedChatMessages(cid, msgs, msgs.length >= 35);
+      }
+      // İlk 6 sohbet için mesajlar henüz önbellekte yoksa veya yeni mesaj varsa arka planda indir
+      if (idx < 6 && state.me?.id && c.last_message_at) {
+        const current = chatCache.get(cid)?.messages || msgs || [];
+        const lastCachedTime = current.length ? new Date(current[current.length - 1].created_at).getTime() : 0;
+        const lastServerTime = new Date(c.last_message_at).getTime();
+        if (!current.length || lastServerTime > lastCachedTime) {
+          fetchMessages(state.me.id, cid).then((remoteRows) => {
+            if (remoteRows && remoteRows.length) {
+              setCachedChatMessages(cid, remoteRows, remoteRows.length >= 40);
+              saveLocalMessages(cid, remoteRows).catch(() => {});
+            }
+          }).catch(() => {});
+        }
+      }
+    }).catch(() => {});
+  });
+}
+
+export function handleSidebarBack() {
+  if (query) {
+    clearSearch();
+    render();
+    return true;
   }
+  if (filter !== 'all') {
+    filter = 'all';
+    document.querySelectorAll('.filters button').forEach((b) => b.classList.toggle('active', b.dataset.filter === 'all'));
+    render();
+    return true;
+  }
+  return false;
 }
 
 export async function loadChats() {
