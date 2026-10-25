@@ -1,4 +1,4 @@
-/* =====================================================================
+﻿/* =====================================================================
  *  sidebar.css — sol panel: üst çubuk, arama, yüzen sohbet kartları (v5)
  * ===================================================================== */
 #app {
@@ -212,6 +212,8 @@
   border-radius: 14px;
   cursor: pointer;
   border: 1px solid transparent;
+  content-visibility: auto;
+  contain-intrinsic-size: 0 68px;
   transition: background 0.18s var(--ease), transform 0.18s var(--ease), border-color 0.18s;
 }
 .chat-item.static-item {

@@ -31,6 +31,7 @@ import { openChatAnalyticsModal } from './command-palette.js';
 import { playFxSound, checkAndTriggerCelebration, toggleZenMode } from './fx.js';
 import { icon } from './icons.js';
 import { toast } from './toast.js';
+import { getLocalMessages, saveLocalMessages, saveSingleLocalMessage, deleteLocalMessage } from '../services/db.js';
 
 const GROUP_GAP_MS = 5 * 60 * 1000;
 
@@ -478,7 +479,7 @@ export async function openChat(chat) {
     return;
   }
 
-  // Önbellekte varsa 0ms gecikmeyle anında ekrana çiz
+  // Önbellekte varsa (RAM veya IndexedDB) 0ms gecikmeyle anında ekrana çiz
   const cached = chatCache.get(chat.id);
   if (cached && cached.messages.length) {
     loaded = [...cached.messages];
@@ -487,7 +488,21 @@ export async function openChat(chat) {
     renderAll();
     scrollToBottom();
   } else {
-    box().replaceChildren(el('div', 'no-msg', 'Yükleniyor…'));
+    try {
+      const localMsgs = await getLocalMessages(chat.id);
+      if (my === token && localMsgs && localMsgs.length) {
+        loaded = [...localMsgs];
+        loadedIds = new Set(loaded.map((m) => m.id));
+        hasMore = localMsgs.length >= CONFIG.PAGE_SIZE;
+        chatCache.set(chat.id, { messages: [...loaded], hasMore });
+        renderAll();
+        scrollToBottom();
+      } else {
+        box().replaceChildren(el('div', 'no-msg', 'Yükleniyor…'));
+      }
+    } catch {
+      box().replaceChildren(el('div', 'no-msg', 'Yükleniyor…'));
+    }
   }
 
   try {
@@ -497,6 +512,7 @@ export async function openChat(chat) {
     loadedIds = new Set(rows.map((m) => m.id));
     hasMore = rows.length === CONFIG.PAGE_SIZE;
     chatCache.set(chat.id, { messages: [...rows], hasMore });
+    saveLocalMessages(chat.id, rows).catch(() => {});
 
     renderAll();
     scrollToBottom();
@@ -802,6 +818,7 @@ function createMessageElement(m, prev, animate) {
         await deleteMessageForEveryone(msg.id);
         msg.is_deleted = true;
         refreshSingleMessage(msg.id);
+        deleteLocalMessage(msg.id).catch(() => {});
       } catch (err) {
         toast('Silinemedi: ' + trErr(err));
       }
@@ -958,6 +975,10 @@ function appendMessage(m) {
   b.append(row);
   loaded.push(m);
   loadedIds.add(m.id);
+
+  if (state.activeChat && !state.activeChat.isSelf && !String(m.id).startsWith('opt_')) {
+    saveSingleLocalMessage(state.activeChat.id, m).catch(() => {});
+  }
 
   updateSmartReplies();
   if (stick) {

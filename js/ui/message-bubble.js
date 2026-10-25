@@ -35,6 +35,12 @@ document.addEventListener('click', (e) => {
 
 export function renderTick(m) {
   const t = el('span', 'tick');
+  if (m.pending || String(m.id).startsWith('opt_')) {
+    t.classList.add('pending');
+    t.title = 'Gönderiliyor…';
+    t.innerHTML = icon('clock');
+    return t;
+  }
   if (m.read_at) {
     t.classList.add('read');
     t.title = 'Okundu';

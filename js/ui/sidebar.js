@@ -15,6 +15,7 @@ import { icon } from './icons.js';
 import { toast } from './toast.js';
 import { updateFaviconBadge } from './fx.js';
 import { renderStoriesBar } from './command-palette.js';
+import { getLocalChats, saveLocalChats } from '../services/db.js';
 
 let onOpen = () => {};
 let query = '';
@@ -24,12 +25,29 @@ let searchSeq = 0;
 let renderQueued = false;
 
 export async function loadChats() {
+  // 1. Önce telefon/cihaz hafızasından 0ms'de anında ekrana bas
+  if (!state.chats || !state.chats.length) {
+    try {
+      const cached = await getLocalChats();
+      if (cached && cached.length) {
+        state.chats = cached;
+        cached.forEach((c) => setLastSeen(c.contact_id, c.last_seen));
+        bus.emit('chats:changed');
+      }
+    } catch {}
+  }
+
+  // 2. Arka planda sunucudan güncelle
   try {
-    state.chats = await fetchChats();
+    const remote = await fetchChats();
+    state.chats = remote;
     state.chats.forEach((c) => setLastSeen(c.contact_id, c.last_seen));
     bus.emit('chats:changed');
+    saveLocalChats(remote).catch(() => {});
   } catch (err) {
-    toast('Sohbetler yüklenemedi: ' + trErr(err));
+    if (!state.chats || !state.chats.length) {
+      toast('Sohbetler yüklenemedi: ' + trErr(err));
+    }
   }
 }
 

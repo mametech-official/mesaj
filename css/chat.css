@@ -1,4 +1,4 @@
-/* =====================================================================
+﻿/* =====================================================================
  *  chat.css — sohbet alanı, 3B balonlar, cam composer, boş ekran (v5)
  * ===================================================================== */
 #chat {
@@ -342,6 +342,8 @@
   flex-direction: column;
   margin-top: 2px;
   position: relative;
+  content-visibility: auto;
+  contain-intrinsic-size: 0 44px;
 }
 .msg-row.has-menu,
 .msg-row:has(.msg-menu) {
