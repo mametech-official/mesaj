@@ -54,7 +54,13 @@ export function initComposer({ send, onTyping, onImage, onVideo, onDocument, onE
   /* ---------------- 2. Metin & Eğik Çizgi (/) Komut Menüsü (#74) ---------------- */
   function autoGrow() {
     input.style.height = 'auto';
-    input.style.height = Math.min(input.scrollHeight, 140) + 'px';
+    const nextH = Math.max(48, Math.min(input.scrollHeight, 140));
+    input.style.height = nextH + 'px';
+    if (nextH > 56) {
+      composerForm.style.alignItems = 'flex-end';
+    } else {
+      composerForm.style.alignItems = 'center';
+    }
   }
   function updateAction() {
     actionWrap.classList.toggle('has-text', input.value.trim().length > 0);
@@ -449,6 +455,9 @@ export function initComposer({ send, onTyping, onImage, onVideo, onDocument, onE
   $('rec-stop').addEventListener('click', finishRecording);
   $('rec-cancel').addEventListener('click', () => cancelRecording());
   $('rec-send').addEventListener('click', sendRecording);
+
+  autoGrow();
+  updateAction();
 
   return {
     startReply,
