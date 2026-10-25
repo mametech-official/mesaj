@@ -1,0 +1,19 @@
+{
+  "name": "Mesaj Web",
+  "short_name": "Mesaj",
+  "version": "0.7",
+  "description": "WhatsApp Web Benzeri Modern Mesajlaşma Uygulaması",
+  "start_url": "./",
+  "display": "standalone",
+  "background_color": "#0b141a",
+  "theme_color": "#00a884",
+  "orientation": "any",
+  "icons": [
+    {
+      "src": "assets/doodle.svg",
+      "sizes": "192x192 512x512",
+      "type": "image/svg+xml",
+      "purpose": "any maskable"
+    }
+  ]
+}

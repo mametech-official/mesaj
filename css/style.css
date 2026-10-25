@@ -1,0 +1,6 @@
+/* Giriş noktası: tüm stil modüllerini birleştirir */
+@import url('base.css');
+@import url('components.css');
+@import url('auth.css');
+@import url('sidebar.css');
+@import url('chat.css');

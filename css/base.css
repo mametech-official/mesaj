@@ -1,0 +1,417 @@
+/* =====================================================================
+ *  base.css — tasarım değişkenleri, sıfırlama, tipografi ve animasyonlar (v5)
+ * ===================================================================== */
+:root {
+  --bg-deep: #070d12;
+  --bg-panel: #0e171f;
+  --bg-panel-glass: rgba(14, 23, 31, 0.78);
+  --bg-head: rgba(24, 36, 46, 0.75);
+  --bg-hover: rgba(34, 49, 62, 0.65);
+  --bg-active: rgba(0, 168, 132, 0.14);
+  --bg-input: rgba(26, 39, 49, 0.85);
+  --bubble-out: #005c4b;
+  --bubble-out-grad: linear-gradient(135deg, #00755e 0%, #004f40 100%);
+  --bubble-in: rgba(29, 42, 52, 0.88);
+  --accent: #00a884;
+  --accent-hover: #00c49a;
+  --accent-bright: #00e5b3;
+  --accent-glow: rgba(0, 168, 132, 0.35);
+  --online: #25d366;
+  --tick-read: #53bdeb;
+  --text: #eef2f5;
+  --text-sub: #8fa1ad;
+  --text-dim: #667781;
+  --border: rgba(255, 255, 255, 0.07);
+  --border-highlight: rgba(255, 255, 255, 0.12);
+  --danger: #f15c6d;
+  --doodle-opacity: 0.18;
+  --doodle: url("../assets/doodle.svg");
+  --chat-bg-gradient:
+    radial-gradient(circle at 16% 18%, rgba(0, 168, 132, 0.18) 0%, transparent 48%),
+    radial-gradient(circle at 84% 82%, rgba(83, 189, 235, 0.13) 0%, transparent 52%),
+    radial-gradient(circle at 52% 48%, rgba(0, 92, 75, 0.10) 0%, transparent 65%),
+    linear-gradient(160deg, #070e13 0%, #0c161e 50%, #070d12 100%);
+  --radius-sm: 10px;
+  --radius-md: 14px;
+  --radius-lg: 20px;
+  --shadow-soft: 0 8px 30px rgba(0, 0, 0, 0.38);
+  --shadow-elevated: 0 18px 48px rgba(0, 0, 0, 0.55);
+  --ease: cubic-bezier(0.22, 1, 0.36, 1);
+}
+
+/* Tema Varyasyonları */
+:root[data-theme="aurora"] {
+  --bg-deep: #051116;
+  --bg-panel: linear-gradient(180deg, #0b1d26 0%, #071319 100%);
+  --bg-panel-glass: rgba(11, 29, 38, 0.82);
+  --bg-head: rgba(15, 38, 49, 0.84);
+  --chat-bg-gradient:
+    radial-gradient(circle at 18% 20%, rgba(0, 229, 179, 0.28) 0%, transparent 50%),
+    radial-gradient(circle at 82% 80%, rgba(56, 189, 248, 0.22) 0%, transparent 52%),
+    radial-gradient(circle at 50% 50%, var(--accent-glow) 0%, transparent 65%),
+    linear-gradient(160deg, #06131a 0%, #0d222d 50%, #050f14 100%);
+}
+:root[data-theme="classic"] {
+  --bg-deep: #081218;
+  --bg-panel: linear-gradient(180deg, #0f1c24 0%, #0a1319 100%);
+  --bg-panel-glass: rgba(15, 28, 36, 0.82);
+  --bg-head: rgba(22, 36, 46, 0.84);
+  --chat-bg-gradient:
+    radial-gradient(circle at 50% 35%, var(--accent-glow) 0%, transparent 62%),
+    linear-gradient(180deg, #0b141a 0%, #0e1921 100%);
+}
+:root[data-theme="midnight"] {
+  --bg-deep: #040918;
+  --bg-panel: linear-gradient(180deg, #0a1633 0%, #060d20 100%);
+  --bg-panel-glass: rgba(10, 22, 51, 0.84);
+  --bg-head: rgba(14, 30, 68, 0.85);
+  --chat-bg-gradient:
+    radial-gradient(circle at 20% 20%, rgba(56, 189, 248, 0.30) 0%, transparent 52%),
+    radial-gradient(circle at 80% 80%, rgba(99, 102, 241, 0.26) 0%, transparent 55%),
+    radial-gradient(circle at 50% 50%, var(--accent-glow) 0%, transparent 65%),
+    linear-gradient(160deg, #050c20 0%, #0c1b3b 50%, #040816 100%);
+}
+:root[data-theme="oled"] {
+  --bg-deep: #000000;
+  --bg-panel: linear-gradient(180deg, #030507 0%, #000000 100%);
+  --bg-panel-glass: rgba(3, 5, 7, 0.92);
+  --bg-head: rgba(8, 12, 16, 0.90);
+  --chat-bg-gradient:
+    radial-gradient(circle at 50% 50%, var(--accent-glow) 0%, transparent 58%),
+    linear-gradient(180deg, #000000 0%, #020406 100%);
+}
+:root[data-theme="clean"] {
+  --bg-deep: #09131c;
+  --bg-panel: linear-gradient(180deg, #10202e 0%, #0b1620 100%);
+  --bg-panel-glass: rgba(16, 32, 46, 0.82);
+  --bg-head: rgba(22, 42, 58, 0.84);
+  --chat-bg-gradient:
+    radial-gradient(circle at 15% 20%, var(--accent-glow) 0%, transparent 52%),
+    radial-gradient(circle at 85% 80%, rgba(83, 189, 235, 0.22) 0%, transparent 52%),
+    linear-gradient(145deg, #0a1620 0%, #132636 50%, #081119 100%);
+  --doodle-opacity: 0 !important;
+}
+
+* {
+  box-sizing: border-box;
+  margin: 0;
+  padding: 0;
+  -webkit-tap-highlight-color: transparent;
+}
+
+html, body {
+  height: 100%;
+  background: var(--bg-deep);
+  color: var(--text);
+  font-family: 'Inter', -apple-system, BlinkMacSystemFont, "Segoe UI", Roboto, sans-serif;
+  font-size: 14.5px;
+  line-height: 1.45;
+  overflow: hidden;
+  user-select: none;
+  -webkit-font-smoothing: antialiased;
+  -moz-osx-font-smoothing: grayscale;
+}
+
+h1, h2, h3, .title, .me b {
+  font-family: 'Plus Jakarta Sans', 'Inter', sans-serif;
+  letter-spacing: -0.015em;
+}
+
+button, input, textarea {
+  font: inherit;
+  color: inherit;
+  background: none;
+  border: none;
+  outline: none;
+}
+button { cursor: pointer; }
+a { color: var(--tick-read); text-decoration: none; }
+
+[hidden] { display: none !important; }
+
+/* Canlı Canvas Arka Plan Katmanı */
+.live-bg-canvas {
+  position: absolute;
+  inset: 0;
+  width: 100%;
+  height: 100%;
+  pointer-events: none;
+  z-index: 0;
+}
+
+/* Özel İnce Kaydırma Çubukları */
+::-webkit-scrollbar { width: 5px; height: 5px; }
+::-webkit-scrollbar-track { background: transparent; }
+::-webkit-scrollbar-thumb {
+  background: rgba(255, 255, 255, 0.14);
+  border-radius: 99px;
+}
+::-webkit-scrollbar-thumb:hover {
+  background: rgba(0, 168, 132, 0.45);
+}
+
+/* Animasyonlar */
+@keyframes spin {
+  to { transform: rotate(360deg); }
+}
+@keyframes popIn {
+  from { opacity: 0; transform: scale(0.94) translateY(8px); }
+  to   { opacity: 1; transform: scale(1) translateY(0); }
+}
+@keyframes msgIn {
+  from { opacity: 0; transform: translateY(8px) scale(0.985); }
+  to   { opacity: 1; transform: translateY(0) scale(1); }
+}
+@keyframes pulse {
+  0%, 100% { opacity: 1; transform: scale(1); }
+  50%      { opacity: 0.4; transform: scale(0.88); }
+}
+@keyframes floatSlow {
+  0%, 100% { transform: translateY(0px); }
+  50%      { transform: translateY(-7px); }
+}
+@keyframes glowPulse {
+  0%, 100% { box-shadow: 0 0 0 0 rgba(37, 211, 102, 0.55); }
+  50%      { box-shadow: 0 0 0 6px rgba(37, 211, 102, 0); }
+}
+
+
+/* =====================================================================
+ *  v6 Yeni Canlı Sahneler (Nebula, Matrix, Fireflies, Sky) & Efektler
+ * ===================================================================== */
+:root {
+  --chat-font-size: 14.5px;
+}
+
+:root[data-theme="nebula"] {
+  --bg-deep: #0b0518;
+  --bg-panel: linear-gradient(180deg, #170b30 0%, #0d061c 100%);
+  --bg-panel-glass: rgba(23, 11, 48, 0.84);
+  --bg-head: rgba(34, 17, 68, 0.85);
+  --chat-bg-gradient:
+    radial-gradient(circle at 18% 22%, rgba(168, 85, 247, 0.34) 0%, transparent 52%),
+    radial-gradient(circle at 82% 78%, rgba(236, 72, 153, 0.28) 0%, transparent 52%),
+    radial-gradient(circle at 50% 50%, var(--accent-glow) 0%, transparent 65%),
+    linear-gradient(155deg, #0c051a 0%, #180b33 50%, #070310 100%);
+}
+:root[data-theme="matrix"] {
+  --bg-deep: #020c06;
+  --bg-panel: linear-gradient(180deg, #061c0f 0%, #030e07 100%);
+  --bg-panel-glass: rgba(6, 28, 15, 0.84);
+  --bg-head: rgba(10, 38, 21, 0.85);
+  --chat-bg-gradient:
+    radial-gradient(circle at 50% 22%, rgba(16, 185, 129, 0.32) 0%, transparent 58%),
+    radial-gradient(circle at 20% 80%, var(--accent-glow) 0%, transparent 55%),
+    linear-gradient(180deg, #020c06 0%, #061b0e 50%, #010804 100%);
+}
+:root[data-theme="fireflies"] {
+  --bg-deep: #081109;
+  --bg-panel: linear-gradient(180deg, #122114 0%, #09120a 100%);
+  --bg-panel-glass: rgba(18, 33, 20, 0.84);
+  --bg-head: rgba(26, 45, 28, 0.85);
+  --chat-bg-gradient:
+    radial-gradient(circle at 25% 30%, rgba(250, 204, 21, 0.26) 0%, transparent 52%),
+    radial-gradient(circle at 75% 75%, rgba(16, 185, 129, 0.24) 0%, transparent 55%),
+    radial-gradient(circle at 50% 50%, var(--accent-glow) 0%, transparent 65%),
+    linear-gradient(160deg, #08120b 0%, #112216 50%, #050b07 100%);
+}
+:root[data-theme="sky"] {
+  --bg-deep: #0a1222;
+  --bg-panel: linear-gradient(180deg, #16223b 0%, #0c1426 100%);
+  --bg-panel-glass: rgba(22, 34, 59, 0.84);
+  --bg-head: rgba(32, 46, 78, 0.85);
+  --chat-bg-gradient:
+    radial-gradient(circle at 20% 18%, rgba(251, 146, 60, 0.34) 0%, transparent 50%),
+    radial-gradient(circle at 80% 80%, rgba(56, 189, 248, 0.28) 0%, transparent 55%),
+    radial-gradient(circle at 50% 50%, var(--accent-glow) 0%, transparent 65%),
+    linear-gradient(165deg, #0e1629 0%, #1b2742 50%, #090e1c 100%);
+}
+
+/* Ekran Gizlilik Kalkanı (#82) */
+body.privacy-blurred #app {
+  filter: blur(22px) brightness(0.6);
+  transition: filter 0.28s ease;
+}
+
+/* Zen Odak Modu (#100) */
+#app.zen-mode {
+  grid-template-columns: 0px 1fr !important;
+}
+#app.zen-mode #sidebar {
+  overflow: hidden;
+  border-right: none;
+  opacity: 0;
+  pointer-events: none;
+}
+
+/* Kompakt Görünüm Modu (#29) */
+body.compact-mode .chat-item {
+  padding: 7px 10px;
+}
+body.compact-mode .bubble {
+  padding: 5px 9px;
+}
+
+/* Tıklama Dalgası (Ripple) (#2) */
+.fx-click-ripple {
+  position: fixed;
+  width: 14px;
+  height: 14px;
+  border-radius: 50%;
+  background: radial-gradient(circle, var(--accent-bright) 0%, transparent 70%);
+  transform: translate(-50%, -50%) scale(0);
+  pointer-events: none;
+  z-index: 9999;
+  animation: fxRipple 0.6s ease-out forwards;
+}
+@keyframes fxRipple {
+  to {
+    transform: translate(-50%, -50%) scale(8);
+    opacity: 0;
+  }
+}
+
+/* Parçacık Patlaması (#3) */
+.fx-burst-container {
+  position: fixed;
+  width: 0;
+  height: 0;
+  pointer-events: none;
+  z-index: 9999;
+}
+.fx-burst-container i {
+  position: absolute;
+  width: 6px;
+  height: 6px;
+  border-radius: 50%;
+  transform: translate(-50%, -50%);
+  animation: fxBurst 0.65s cubic-bezier(0.16, 1, 0.3, 1) forwards;
+}
+@keyframes fxBurst {
+  to {
+    transform: translate(var(--tx), var(--ty)) scale(0);
+    opacity: 0;
+  }
+}
+
+/* Tam Ekran Emoji / Konfeti Yağmuru (#12) */
+.fx-emoji-rain {
+  position: fixed;
+  inset: 0;
+  pointer-events: none;
+  z-index: 9998;
+  overflow: hidden;
+}
+.fx-emoji-rain span {
+  position: absolute;
+  top: -50px;
+  animation: fxRainFall linear forwards;
+}
+@keyframes fxRainFall {
+  0%   { transform: translateY(0) rotate(0deg); opacity: 1; }
+  85%  { opacity: 1; }
+  100% { transform: translateY(108vh) rotate(360deg); opacity: 0; }
+}
+
+/* Çift Tıklama Dev 3B Kalp (#18) */
+.fx-big-heart {
+  position: fixed;
+  font-size: 56px;
+  transform: translate(-50%, -50%) scale(0);
+  pointer-events: none;
+  z-index: 9999;
+  filter: drop-shadow(0 10px 24px rgba(244, 63, 94, 0.65));
+  animation: fxBigHeart 0.85s cubic-bezier(0.18, 0.89, 0.32, 1.28) forwards;
+}
+@keyframes fxBigHeart {
+  0%   { transform: translate(-50%, -50%) scale(0) rotate(-15deg); opacity: 1; }
+  50%  { transform: translate(-50%, -65%) scale(1.35) rotate(8deg); opacity: 1; }
+  100% { transform: translate(-50%, -95%) scale(0.9) rotate(0deg); opacity: 0; }
+}
+
+/* Mesaj Silinirken Toza Dönüşme (#15) */
+.fx-dissolve {
+  transition: transform 0.32s ease, opacity 0.32s ease, filter 0.32s ease;
+  transform: scale(0.85) translateY(-10px);
+  filter: blur(8px);
+  opacity: 0;
+}
+
+/* Nudge Ekran Titreşimi (#57) */
+@keyframes nudgeShake {
+  0%, 100% { transform: translate(0, 0); }
+  15% { transform: translate(-9px, 5px); }
+  30% { transform: translate(9px, -6px); }
+  45% { transform: translate(-7px, -4px); }
+  60% { transform: translate(7px, 5px); }
+  75% { transform: translate(-4px, 2px); }
+}
+.fx-nudge-shake {
+  animation: nudgeShake 0.55s ease;
+}
+
+/* =====================================================================
+ *  Dalgalı Tema & Vurgu Rengi Geçiş Efekti (Sinüzoidal Kıvrımlı Sıvı Dalga)
+ * ===================================================================== */
+::view-transition-old(root),
+::view-transition-new(root) {
+  animation: none;
+  mix-blend-mode: normal;
+  display: block;
+}
+::view-transition-old(root) {
+  z-index: 1;
+}
+::view-transition-new(root) {
+  z-index: 9990;
+}
+
+::view-transition-group(fx-wave-layer) {
+  z-index: 99995;
+  animation: none;
+}
+::view-transition-old(fx-wave-layer) {
+  display: none;
+}
+::view-transition-new(fx-wave-layer) {
+  animation: none;
+  mix-blend-mode: normal;
+}
+
+::view-transition-group(wp-studio-card) {
+  z-index: 99998;
+  animation: none;
+}
+::view-transition-old(wp-studio-card) {
+  display: none;
+}
+::view-transition-new(wp-studio-card) {
+  animation: none;
+}
+
+#fx-wave-canvas {
+  position: fixed;
+  inset: 0;
+  width: 100vw;
+  height: 100vh;
+  pointer-events: none;
+  z-index: 99995;
+  view-transition-name: fx-wave-layer;
+}
+
+html.theme-smooth-morph,
+html.theme-smooth-morph body,
+html.theme-smooth-morph #sidebar,
+html.theme-smooth-morph #chat-view,
+html.theme-smooth-morph #empty-state,
+html.theme-smooth-morph #messages-wrap,
+html.theme-smooth-morph .bubble,
+html.theme-smooth-morph .chat-head,
+html.theme-smooth-morph .side-head {
+  transition:
+    background 0.75s cubic-bezier(0.22, 1, 0.36, 1),
+    background-color 0.75s cubic-bezier(0.22, 1, 0.36, 1),
+    border-color 0.75s cubic-bezier(0.22, 1, 0.36, 1),
+    box-shadow 0.75s cubic-bezier(0.22, 1, 0.36, 1),
+    color 0.5s ease !important;
+}

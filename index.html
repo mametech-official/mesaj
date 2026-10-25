@@ -1,0 +1,415 @@
+<!DOCTYPE html>
+<html lang="tr">
+<head>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width, initial-scale=1, viewport-fit=cover">
+<meta name="theme-color" content="#0b141a">
+<title>Mesaj — Yeni Nesil Anlık İletişim</title>
+<link rel="manifest" href="manifest.json">
+<link rel="preconnect" href="https://fonts.googleapis.com">
+<link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
+<link href="https://fonts.googleapis.com/css2?family=Inter:wght@400;500;600;700&family=Plus+Jakarta+Sans:wght@500;600;700;800&display=swap" rel="stylesheet">
+<link rel="stylesheet" href="css/base.css?v=20261025v18">
+<link rel="stylesheet" href="css/components.css?v=20261025v18">
+<link rel="stylesheet" href="css/auth.css?v=20261025v18">
+<link rel="stylesheet" href="css/sidebar.css?v=20261025v18">
+<link rel="stylesheet" href="css/chat.css?v=20261025v18">
+</head>
+<body>
+
+<div id="boot"><div class="spinner"></div></div>
+
+<!-- Dosya doğrudan açıldıysa (file://) ES modülleri çalışmaz: sonsuz yükleme yerine açıklama göster -->
+<script>
+  if (location.protocol === 'file:') {
+    document.addEventListener('DOMContentLoaded', function () {
+      var b = document.getElementById('boot');
+      b.innerHTML = '<div style="max-width:440px;text-align:center;line-height:1.6;padding:24px">' +
+        '<h2 style="color:#e9edef;font-weight:600;margin-bottom:10px">Sunucu ile açmalısın</h2>' +
+        '<p>Bu dosya çift tıklanarak açılamaz (tarayıcı güvenliği modülleri engelliyor).<br>' +
+        'Proje klasöründeki <b>baslat.bat</b> dosyasını çalıştır veya terminalde <code>node server.js</code> yazıp ' +
+        '<b>http://localhost:5500</b> adresini aç.</p></div>';
+    });
+  }
+</script>
+
+<!-- ===================== GİRİŞ / KAYIT ===================== -->
+<div id="auth-screen" hidden>
+  <form class="auth-card" id="auth-form" novalidate>
+    <div class="auth-logo-ring">
+      <div class="auth-logo" data-icon="chat"></div>
+    </div>
+    <h1>Mesaj</h1>
+    <p class="sub">Yeni nesil gerçek zamanlı, güvenli mesajlaşma platformu</p>
+    <div class="tabs" id="auth-tabs" data-mode="login">
+      <button type="button" id="tab-login" class="active">Giriş Yap</button>
+      <button type="button" id="tab-register">Kayıt Ol</button>
+    </div>
+    <div id="auth-msg" class="msg-box" hidden></div>
+    <div class="field" id="username-field" hidden>
+      <label for="auth-username">Kullanıcı adı</label>
+      <input id="auth-username" type="text" autocomplete="username" maxlength="20" autocapitalize="none" spellcheck="false" placeholder="ornek_kullanici">
+      <div class="hint" id="username-hint">3-20 karakter: küçük harf, rakam, alt çizgi</div>
+    </div>
+    <div class="field">
+      <label for="auth-email">E-posta</label>
+      <input id="auth-email" type="email" autocomplete="email" placeholder="ornek@mail.com">
+    </div>
+    <div class="field">
+      <label for="auth-password">Şifre</label>
+      <input id="auth-password" type="password" autocomplete="current-password" minlength="6" placeholder="En az 6 karakter">
+    </div>
+    <button class="btn-primary" id="auth-submit" type="submit">Giriş Yap</button>
+    <div class="auth-footer-note">
+      <span data-icon="lock"></span>
+      <span>Supabase Realtime &amp; RLS ile uçtan uca korunmaktadır</span>
+    </div>
+  </form>
+</div>
+
+<!-- ===================== UYGULAMA ===================== -->
+<div id="app" hidden>
+  <aside id="sidebar">
+    <header class="side-head">
+      <div class="avatar-wrap online me-avatar-wrap" id="me-avatar-wrap" title="Profil Fotoğrafını Değiştir">
+        <div class="avatar sm" id="me-avatar"></div>
+        <div class="avatar-overlay"><span data-icon="camera"></span></div>
+        <span class="presence-dot"></span>
+      </div>
+      <input type="file" id="avatar-input" accept="image/jpeg,image/png,image/webp" hidden>
+      <div class="me" id="me-profile-trigger" style="cursor:pointer" title="Profil ve Durum Ayarları">
+        <b id="me-name"></b>
+        <small><span class="live-pulse"></span>çevrimiçi</small>
+      </div>
+      <button class="icon-btn" id="cmd-palette-btn" title="Komut Paleti (Ctrl+K)" aria-label="Komut Paleti" data-icon="zap"></button>
+      <button class="icon-btn" id="profile-settings-btn" title="Profil ve Ayarlar" aria-label="Profil ve Ayarlar" data-icon="info"></button>
+      <button class="icon-btn" id="theme-btn" title="Arka Plan ve Tema" aria-label="Arka Plan" data-icon="palette"></button>
+      <button class="icon-btn" id="logout-btn" title="Çıkış yap" aria-label="Çıkış yap" data-icon="logout"></button>
+    </header>
+
+    <div id="stories-bar" class="stories-bar" aria-label="24 Saatlik Hikayeler"></div>
+
+    <div id="conn-banner" hidden><div class="spinner"></div><span id="conn-text">Bağlanıyor…</span></div>
+
+    <div class="search-wrap">
+      <label class="search-box">
+        <span data-icon="search"></span>
+        <input id="search" type="search" placeholder="Kullanıcı adı ara veya yeni kişi ekle…" autocomplete="off" autocapitalize="none" spellcheck="false">
+      </label>
+    </div>
+    <div class="filters">
+      <button type="button" data-filter="all" class="active">Tümü</button>
+      <button type="button" data-filter="unread">Okunmamış</button>
+      <button type="button" data-filter="starred">Yıldızlılar</button>
+      <button type="button" data-filter="requests" id="filter-requests-btn">İstekler <span class="badge sm" id="req-badge" hidden></span></button>
+    </div>
+    <div id="list"></div>
+  </aside>
+
+  <main id="chat">
+    <div id="empty-state">
+      <div class="empty-content">
+        <div class="empty-hero">
+          <div class="hero-orb hero-orb-1"></div>
+          <div class="hero-orb hero-orb-2"></div>
+          <svg viewBox="0 0 360 200" width="330" height="184" fill="none" xmlns="http://www.w3.org/2000/svg" class="hero-svg">
+            <defs>
+              <linearGradient id="glass-grad" x1="0%" y1="0%" x2="100%" y2="100%">
+                <stop offset="0%" stop-color="#1e2c36" stop-opacity="0.95"/>
+                <stop offset="100%" stop-color="#0f1920" stop-opacity="0.95"/>
+              </linearGradient>
+              <linearGradient id="emerald-grad" x1="0%" y1="0%" x2="100%" y2="100%">
+                <stop offset="0%" stop-color="#00d9a6"/>
+                <stop offset="100%" stop-color="#008069"/>
+              </linearGradient>
+              <linearGradient id="cyan-grad" x1="0%" y1="0%" x2="100%" y2="100%">
+                <stop offset="0%" stop-color="#38bdf8"/>
+                <stop offset="100%" stop-color="#0284c7"/>
+              </linearGradient>
+              <filter id="glow-shadow" x="-20%" y="-20%" width="140%" height="140%">
+                <feDropShadow dx="0" dy="10" stdDeviation="12" flood-color="#00a884" flood-opacity="0.28"/>
+              </filter>
+            </defs>
+
+            <!-- Ana Cam Masaüstü Gövdesi -->
+            <rect x="65" y="22" width="210" height="130" rx="14" fill="url(#glass-grad)" stroke="url(#emerald-grad)" stroke-width="1.8" filter="url(#glow-shadow)"/>
+            <!-- Üst Pencere Noktaları -->
+            <circle cx="82" cy="35" r="3.2" fill="#f15c6d"/>
+            <circle cx="93" cy="35" r="3.2" fill="#f59e0b"/>
+            <circle cx="104" cy="35" r="3.2" fill="#25d366"/>
+            <line x1="65" y1="45" x2="275" y2="45" stroke="#263742" stroke-width="1.2"/>
+
+            <!-- Sol Sidebar Mock -->
+            <line x1="138" y1="45" x2="138" y2="152" stroke="#263742" stroke-width="1.2"/>
+            <rect x="75" y="55" width="52" height="8" rx="4" fill="url(#emerald-grad)" opacity="0.9"/>
+            <circle cx="81" cy="76" r="6" fill="#263742"/>
+            <rect x="91" y="73" width="34" height="6" rx="3" fill="#8696a0" opacity="0.45"/>
+            <circle cx="81" cy="94" r="6" fill="#263742"/>
+            <rect x="91" y="91" width="30" height="6" rx="3" fill="#8696a0" opacity="0.35"/>
+            <circle cx="81" cy="112" r="6" fill="#263742"/>
+            <rect x="91" y="109" width="36" height="6" rx="3" fill="#8696a0" opacity="0.35"/>
+
+            <!-- Sağ Sohbet Balonları Mock -->
+            <rect x="150" y="56" width="68" height="18" rx="7" fill="#22303a"/>
+            <rect x="190" y="81" width="72" height="20" rx="7" fill="url(#emerald-grad)"/>
+            <rect x="150" y="108" width="56" height="18" rx="7" fill="#22303a"/>
+            <rect x="150" y="133" width="112" height="10" rx="5" fill="#18252d" stroke="#263742" stroke-width="1"/>
+
+            <!-- Yüzen Mobil Kart (Sağ Alt) -->
+            <g class="hero-float-phone" transform="translate(248, 56)">
+              <rect x="0" y="0" width="60" height="108" rx="12" fill="#0f1920" stroke="url(#cyan-grad)" stroke-width="2" filter="url(#glow-shadow)"/>
+              <rect x="21" y="7" width="18" height="3.5" rx="1.75" fill="#334756"/>
+              <rect x="8" y="20" width="42" height="14" rx="5" fill="url(#emerald-grad)"/>
+              <rect x="8" y="40" width="34" height="14" rx="5" fill="#22303a"/>
+              <rect x="16" y="60" width="36" height="14" rx="5" fill="url(#cyan-grad)" opacity="0.85"/>
+              <circle cx="30" cy="96" r="4" fill="#334756"/>
+            </g>
+
+            <!-- Yüzen Güvenlik / Emoji Rozeti (Sol Üst) -->
+            <g class="hero-float-badge" transform="translate(36, 62)">
+              <rect x="0" y="0" width="44" height="44" rx="13" fill="#15232b" stroke="url(#emerald-grad)" stroke-width="1.8" filter="url(#glow-shadow)"/>
+              <path d="M15 22.5l4.5 4.5 9.5-9.5" stroke="#00d9a6" stroke-width="2.6" stroke-linecap="round" stroke-linejoin="round"/>
+            </g>
+          </svg>
+        </div>
+
+        <div class="empty-badge"><span class="ico-inline"><span data-icon="sparkles"></span> Mesaj Web v0.7 • Canlı Grafik Motoru</span></div>
+        <h2>Mesaj Web'e Hoş Geldiniz</h2>
+        <p>Kullanıcı adıyla arkadaşlarınızı ekleyin; yüksek çözünürlüklü medya, sesli notlar, anlık ifadeler ve canlı arka planlarla kesintisiz sohbet edin.</p>
+
+        <div class="empty-quick-grid">
+          <button type="button" class="qa-card" id="qa-search">
+            <div class="qa-icon emerald" data-icon="search"></div>
+            <div class="qa-text">
+              <b>Kişi Ara &amp; Ekle</b>
+              <span>Kullanıcı adıyla arkadaş bul</span>
+            </div>
+          </button>
+          <button type="button" class="qa-card" id="qa-theme">
+            <div class="qa-icon cyan" data-icon="palette"></div>
+            <div class="qa-text">
+              <b>Canlı Tema &amp; Aurora</b>
+              <span>5 özel tema ve etkileşimli doku</span>
+            </div>
+          </button>
+          <button type="button" class="qa-card" id="qa-starred">
+            <div class="qa-icon amber" data-icon="star"></div>
+            <div class="qa-text">
+              <b>Yıldızlı Mesajlar</b>
+              <span>Önemli mesajlara hızlıca ulaş</span>
+            </div>
+          </button>
+          <button type="button" class="qa-card" id="qa-profile">
+            <div class="qa-icon purple" data-icon="info"></div>
+            <div class="qa-text">
+              <b>Profil &amp; Biyografi</b>
+              <span>Avatar ve durum metnini düzenle</span>
+            </div>
+          </button>
+        </div>
+
+        <div style="display:flex;gap:10px;flex-wrap:wrap;justify-content:center;margin-bottom:18px">
+          <button type="button" class="btn-change-wp" id="empty-theme-btn" style="margin-bottom:0">
+            <span data-icon="palette"></span>
+            <span>Tema &amp; Sahne Stüdyosu</span>
+          </button>
+          <button type="button" class="btn-change-wp" id="empty-cmd-btn" style="margin-bottom:0">
+            <span data-icon="zap"></span>
+            <span>Komut Paleti (Ctrl+K)</span>
+          </button>
+        </div>
+
+        <div class="encryption-note">
+          <span data-icon="lock"></span>
+          <span>Kişisel mesajlarınız gerçek zamanlı güvenlik politikaları (RLS) ile korunmaktadır</span>
+        </div>
+      </div>
+    </div>
+
+    <section id="chat-view" hidden>
+      <header class="chat-head">
+        <button class="icon-btn" id="back-btn" aria-label="Geri" data-icon="back"></button>
+        <div class="avatar-wrap" id="chat-avatar-wrap"><div class="avatar sm" id="chat-avatar"></div><span class="presence-dot"></span></div>
+        <div class="info">
+          <div class="title" id="chat-title"></div>
+          <div class="status" id="chat-status"></div>
+        </div>
+        <button class="icon-btn" id="chat-search-btn" title="Sohbette Ara" aria-label="Sohbette Ara" data-icon="search"></button>
+        <button class="icon-btn" id="chat-theme-btn" title="Arka Planı Değiştir" aria-label="Arka Plan" data-icon="palette"></button>
+        <button class="icon-btn" id="chat-more-btn" title="Seçenekler" aria-label="Seçenekler" data-icon="more"></button>
+        <div id="chat-header-menu" class="msg-menu" hidden>
+          <button type="button" id="menu-item-search"><span data-icon="search"></span> Sohbette Ara</button>
+          <button type="button" id="menu-item-theme"><span data-icon="palette"></span> Arka Planı Değiştir</button>
+          <button type="button" id="menu-item-block" class="danger"><span data-icon="block"></span> <span id="menu-block-text">Engelle</span></button>
+        </div>
+      </header>
+
+      <div id="chat-search-bar" hidden>
+        <span data-icon="search"></span>
+        <input id="search-input-chat" type="search" placeholder="Sohbette mesaj ara…" autocomplete="off">
+        <span class="search-count" id="search-match-count">0 / 0</span>
+        <button class="icon-btn" id="search-prev-btn" title="Önceki" aria-label="Önceki" data-icon="arrowUp"></button>
+        <button class="icon-btn" id="search-next-btn" title="Sonraki" aria-label="Sonraki" data-icon="down"></button>
+        <button class="icon-btn" id="search-close-btn" title="Kapat" aria-label="Kapat" data-icon="close"></button>
+      </div>
+
+      <div id="messages-wrap">
+        <div id="messages"></div>
+        <button id="scroll-down" type="button" aria-label="En alta git"><span data-icon="down"></span><span class="badge" id="scroll-badge" hidden></span></button>
+        <div id="drop-hint">Dosyayı göndermek için buraya bırak</div>
+      </div>
+
+      <div id="emoji-panel" aria-label="Emoji paneli"></div>
+
+      <div id="composer-banner-container" hidden></div>
+      <div id="blocked-banner" hidden></div>
+
+      <div id="attach-menu" hidden>
+        <button type="button" id="btn-attach-image"><span data-icon="image"></span> Fotoğraf</button>
+        <button type="button" id="btn-attach-video"><span data-icon="video"></span> Video</button>
+        <button type="button" id="btn-attach-doc"><span data-icon="document"></span> Belge</button>
+      </div>
+
+      <form id="composer" autocomplete="off">
+        <button class="icon-btn" id="emoji-btn" type="button" title="Emoji" aria-label="Emoji" data-icon="emoji"></button>
+        <button class="icon-btn" id="attach-btn" type="button" title="Ek ekle" aria-label="Ek ekle" data-icon="attach"></button>
+        <input type="file" id="file-input" accept="image/jpeg,image/png,image/webp,image/gif" hidden>
+        <input type="file" id="video-input" accept="video/mp4,video/webm" hidden>
+        <input type="file" id="doc-input" accept=".pdf,.doc,.docx,.xls,.xlsx,.zip,.txt" hidden>
+        <textarea id="msg-input" rows="1" maxlength="4000" placeholder="Bir mesaj yazın…"></textarea>
+        <div class="action-wrap" id="action-wrap">
+          <button class="icon-btn" id="mic-btn" type="button" title="Sesli mesaj" aria-label="Sesli mesaj" data-icon="mic"></button>
+          <button class="icon-btn" id="send-btn" type="submit" title="Gönder" aria-label="Gönder" data-icon="send"></button>
+        </div>
+      </form>
+
+      <div id="recorder-bar" hidden>
+        <button class="icon-btn danger" id="rec-cancel" type="button" title="İptal" aria-label="Kaydı iptal et" data-icon="trash"></button>
+        <div class="rec-body">
+          <div class="rec-live" id="rec-live">
+            <span class="rec-dot"></span><span id="rec-timer">0:00</span>
+            <canvas id="rec-canvas"></canvas>
+          </div>
+          <div class="rec-preview" id="rec-preview" hidden><div id="rec-player-mount"></div></div>
+        </div>
+        <button class="icon-btn" id="rec-stop" type="button" title="Kaydı durdur" aria-label="Kaydı durdur" data-icon="stop"></button>
+        <button class="icon-btn accent" id="rec-send" type="button" title="Gönder" aria-label="Sesli mesajı gönder" data-icon="send" hidden></button>
+      </div>
+
+      <!-- Fotoğraf önizleme (tam alan) -->
+      <div id="media-preview" aria-hidden="true">
+        <div class="mp-top">
+          <button class="icon-btn" id="mp-close" type="button" aria-label="Kapat" data-icon="close"></button>
+          <div class="name" id="mp-name"></div>
+          <div class="size" id="mp-size"></div>
+        </div>
+        <div class="mp-stage">
+          <img id="mp-img" alt="Önizleme">
+          <div class="mp-progress" id="mp-progress" hidden>
+            <div class="mp-progress-bar" id="mp-progress-bar"></div>
+            <span class="mp-progress-text" id="mp-progress-text">Yükleniyor...</span>
+          </div>
+        </div>
+        <form class="mp-bottom" id="mp-form" autocomplete="off">
+          <input id="mp-caption" type="text" maxlength="1000" placeholder="Açıklama ekleyin…">
+          <button class="icon-btn accent" id="mp-send" type="submit" aria-label="Gönder" data-icon="send"></button>
+        </form>
+      </div>
+    </section>
+  </main>
+</div>
+
+<!-- ===================== ARKA PLAN & TEMA MODALI ===================== -->
+<div id="wallpaper-modal" role="dialog" aria-modal="true" aria-labelledby="wp-title">
+  <div class="wallpaper-card">
+    <div class="wp-head">
+      <h3 id="wp-title"><span data-icon="palette"></span> Arka Plan ve Tema Stüdyosu</h3>
+      <button class="icon-btn" id="wp-close" aria-label="Kapat" data-icon="close"></button>
+    </div>
+    <div class="wp-body">
+      <div class="wp-section-title">Canlı Tema &amp; Duvar Kağıdı Deseni</div>
+      <div class="theme-grid">
+        <button type="button" class="theme-option" data-theme="aurora">
+          <div class="theme-thumb aurora"></div>
+          <span class="theme-name">Zümrüt Aurora</span>
+        </button>
+        <button type="button" class="theme-option" data-theme="classic">
+          <div class="theme-thumb classic"></div>
+          <span class="theme-name">Klasik Doodle</span>
+        </button>
+        <button type="button" class="theme-option" data-theme="midnight">
+          <div class="theme-thumb midnight"></div>
+          <span class="theme-name">Gece Mavisi</span>
+        </button>
+        <button type="button" class="theme-option" data-theme="oled">
+          <div class="theme-thumb oled"></div>
+          <span class="theme-name">OLED Saf Koyu</span>
+        </button>
+        <button type="button" class="theme-option" data-theme="clean">
+          <div class="theme-thumb clean"></div>
+          <span class="theme-name">Sade Gradyan</span>
+        </button>
+      </div>
+
+      <div class="wp-section-title">Doodle Belirginliği (Opaklık)</div>
+      <div class="opacity-controls">
+        <div class="opacity-pills">
+          <button type="button" class="opacity-pill" data-val="8">Hafif (%8)</button>
+          <button type="button" class="opacity-pill" data-val="18">Önerilen (%18)</button>
+          <button type="button" class="opacity-pill" data-val="28">Belirgin (%28)</button>
+          <button type="button" class="opacity-pill" data-val="40">Canlı (%40)</button>
+        </div>
+        <div class="opacity-slider-row">
+          <input type="range" id="opacity-slider" min="0" max="50" step="2" value="18">
+          <span class="opacity-val" id="opacity-val">%18</span>
+        </div>
+      </div>
+    </div>
+  </div>
+</div>
+
+<!-- ===================== PROFİL VE AYARLAR MODALI ===================== -->
+<div id="profile-modal" role="dialog" aria-modal="true" aria-labelledby="profile-title">
+  <div class="profile-card">
+    <div class="p-head">
+      <h3 id="profile-title">Profil &amp; Ayarlar</h3>
+      <button class="icon-btn" id="profile-modal-close" aria-label="Kapat" data-icon="close"></button>
+    </div>
+    <div class="p-body">
+      <div class="p-avatar-sec">
+        <div class="avatar" id="profile-modal-avatar"></div>
+        <b id="profile-modal-username" style="font-size:17px;margin-top:6px"></b>
+      </div>
+
+      <form id="profile-about-form" class="p-field">
+        <label for="profile-modal-about">Hakkında / Biyografi (Durum Metni)</label>
+        <input id="profile-modal-about" type="text" maxlength="140" placeholder="Durumunuzu yazın…">
+        <button type="submit" class="btn-sm primary" style="align-self:flex-end;margin-top:6px">Değişiklikleri Kaydet</button>
+      </form>
+
+      <div class="p-field">
+        <label>Masaüstü Bildirimleri</label>
+        <button type="button" id="profile-notif-btn" class="btn-sm secondary" style="text-align:left;padding:11px 14px">
+          <span data-icon="bell"></span> Masaüstü Bildirimlerini Etkinleştir
+        </button>
+      </div>
+
+      <div class="p-field">
+        <label>Engellenen Kişiler</label>
+        <div id="profile-blocked-list" class="p-blocked-list"></div>
+      </div>
+
+      <div style="text-align:center;padding:14px 0 4px;font-size:12px;opacity:0.65;border-top:1px solid rgba(255,255,255,0.08);margin-top:10px">
+        Mesaj Web • Versiyon 0.7
+      </div>
+    </div>
+  </div>
+</div>
+
+<div id="lightbox" aria-hidden="true"><img alt="Fotoğraf"></div>
+<div id="toast" role="status" aria-live="polite"></div>
+
+<script type="module" src="js/app.js?v=20261025v18"></script>
+<noscript>Bu uygulama JavaScript gerektirir.</noscript>
+</body>
+</html>
