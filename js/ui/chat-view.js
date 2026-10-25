@@ -44,7 +44,12 @@ let unseen = 0;
 
 let starredSet = new Set();
 let reactionsMap = new Map();
-const chatCache = new Map(); // chatId -> { messages: [], hasMore: false }
+export const chatCache = new Map(); // chatId -> { messages: [], hasMore: false }
+
+export function setCachedChatMessages(chatId, messages, hasMore = false) {
+  if (!chatId || !Array.isArray(messages)) return;
+  chatCache.set(chatId, { messages: [...messages], hasMore });
+}
 
 const box = () => $('messages');
 const nearBottom = () => { const b = box(); return b.scrollHeight - b.scrollTop - b.clientHeight < 140; };
@@ -571,7 +576,7 @@ export function closeChat() {
       $('chat-view').hidden = true;
       $('empty-state').hidden = false;
     }
-  }, 260);
+  }, 180);
 }
 
 export function resetChatView() {

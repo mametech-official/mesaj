@@ -15,7 +15,8 @@ import { icon } from './icons.js';
 import { toast } from './toast.js';
 import { updateFaviconBadge } from './fx.js';
 import { renderStoriesBar } from './command-palette.js';
-import { getLocalChats, saveLocalChats } from '../services/db.js';
+import { getLocalChats, saveLocalChats, getLocalMessages } from '../services/db.js';
+import { setCachedChatMessages } from './chat-view.js';
 
 let onOpen = () => {};
 let query = '';
@@ -23,6 +24,18 @@ let searchResults = [];
 let filter = 'all';               // 'all' | 'unread' | 'requests'
 let searchSeq = 0;
 let renderQueued = false;
+
+function preloadRecentMessages(chats) {
+  if (!Array.isArray(chats)) return;
+  const top = chats.slice(0, 8);
+  for (const c of top) {
+    if (c && c.contact_id) {
+      getLocalMessages(c.contact_id, 35).then((msgs) => {
+        if (msgs && msgs.length) setCachedChatMessages(c.contact_id, msgs, msgs.length >= 35);
+      }).catch(() => {});
+    }
+  }
+}
 
 export async function loadChats() {
   // 1. Önce telefon/cihaz hafızasından 0ms'de anında ekrana bas
@@ -33,6 +46,7 @@ export async function loadChats() {
         state.chats = cached;
         cached.forEach((c) => setLastSeen(c.contact_id, c.last_seen));
         bus.emit('chats:changed');
+        preloadRecentMessages(cached);
       }
     } catch {}
   }
@@ -44,6 +58,7 @@ export async function loadChats() {
     state.chats.forEach((c) => setLastSeen(c.contact_id, c.last_seen));
     bus.emit('chats:changed');
     saveLocalChats(remote).catch(() => {});
+    preloadRecentMessages(remote);
   } catch (err) {
     if (!state.chats || !state.chats.length) {
       toast('Sohbetler yüklenemedi: ' + trErr(err));

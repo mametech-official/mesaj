@@ -1,4 +1,4 @@
-/* =====================================================================
+﻿/* =====================================================================
  *  base.css — tasarım değişkenleri, sıfırlama, tipografi ve animasyonlar (v5)
  * ===================================================================== */
 :root {
@@ -97,6 +97,11 @@
   margin: 0;
   padding: 0;
   -webkit-tap-highlight-color: transparent;
+  touch-action: manipulation;
+}
+
+html, body, button, input, textarea, a, .chat-item, .bubble {
+  touch-action: manipulation;
 }
 
 html, body {

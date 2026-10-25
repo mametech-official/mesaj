@@ -1231,7 +1231,7 @@
     width: 100%;
     height: 100%;
     transform: translate3d(0, 0, 0);
-    transition: transform 0.28s cubic-bezier(0.16, 1, 0.3, 1), opacity 0.28s ease;
+    transition: transform 0.19s cubic-bezier(0.1, 0.9, 0.2, 1), opacity 0.19s ease;
     z-index: 1;
     display: flex !important;
   }
@@ -1241,15 +1241,15 @@
     width: 100%;
     height: 100%;
     transform: translate3d(100%, 0, 0);
-    transition: transform 0.28s cubic-bezier(0.16, 1, 0.3, 1);
+    transition: transform 0.19s cubic-bezier(0.1, 0.9, 0.2, 1);
     z-index: 2;
     display: flex !important;
     pointer-events: none;
-    box-shadow: -12px 0 35px rgba(0, 0, 0, 0.65);
+    box-shadow: -14px 0 35px rgba(0, 0, 0, 0.7);
   }
   #app.chat-open #sidebar {
-    transform: translate3d(-25%, 0, 0);
-    opacity: 0.72;
+    transform: translate3d(-20%, 0, 0);
+    opacity: 0.65;
     pointer-events: none;
   }
   #app.chat-open #chat {
@@ -1265,17 +1265,31 @@
 
 /* Masaüstü ve Genel Yumuşak Sohbet Açılışı */
 #chat-view.chat-slide-in {
-  animation: chatFadeSlide 0.22s cubic-bezier(0.16, 1, 0.3, 1) forwards;
+  animation: chatFadeSlide 0.16s cubic-bezier(0.1, 0.9, 0.2, 1) forwards;
 }
 @keyframes chatFadeSlide {
   from { opacity: 0; transform: translateY(6px); }
   to { opacity: 1; transform: translateY(0); }
 }
 
-/* Dokunma Hissiyatı */
+/* Dokunma Hissiyatı (Haptics) */
 .chat-item:active {
-  transform: scale(0.975);
-  transition: transform 0.08s ease;
+  transform: scale(0.965);
+  transition: transform 0.05s ease;
+}
+.btn-sm:active, .icon-btn:active, #send-btn:active {
+  transform: scale(0.92);
+  transition: transform 0.05s ease;
+}
+
+/* Mesaj Yaylanarak Pop Hareketi (WhatsApp Spring) */
+.msg-row.anim {
+  animation: msgSpringIn 0.16s cubic-bezier(0.18, 0.89, 0.32, 1.28) forwards;
+}
+@keyframes msgSpringIn {
+  0% { opacity: 0; transform: translateY(12px) scale(0.93); }
+  75% { transform: translateY(-2px) scale(1.01); }
+  100% { opacity: 1; transform: translateY(0) scale(1); }
 }
 
 
