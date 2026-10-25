@@ -221,35 +221,32 @@ export function initComposer({ send, onTyping, onImage, onVideo, onDocument, onE
       return;
     }
 
-    busy = true;
+    if (editTarget) {
+      const target = editTarget;
+      cancelEdit();
+      input.focus();
+      onEdit(target, rawText).catch((err) => toast('İşlem başarısız: ' + trErr(err)));
+      return;
+    }
+
+    const replyId = replyTarget ? replyTarget.id : null;
+    input.value = '';
+    saveDraft();
+    cancelReply();
+    autoGrow();
+    updateAction();
+    input.focus();
+
+    if (rawText === '/titret' && state.activeChat) {
+      sendNudgeBroadcast(state.activeChat.id);
+    }
+    playFxSound('out');
+
     try {
-      if (editTarget) {
-        await onEdit(editTarget, rawText);
-        cancelEdit();
-      } else {
-        if (rawText === '/titret' && state.activeChat) {
-          sendNudgeBroadcast(state.activeChat.id);
-        }
-        const transformed = await transformOutgoingCommand(rawText, state.me?.username || 'ben');
-        const replyId = replyTarget ? replyTarget.id : null;
-
-        // Parçacık patlaması (#3) ve kutlama yağmuru (#12)
-        const sendRect = $('send-btn')?.getBoundingClientRect();
-        if (sendRect) triggerParticleBurst(sendRect.left + 20, sendRect.top + 20);
-        checkAndTriggerCelebration(transformed);
-        playFxSound('out');
-
-        await send({ content: transformed, replyToId: replyId });
-        input.value = '';
-        saveDraft();
-        cancelReply();
-        autoGrow(); updateAction();
-      }
+      const transformed = await transformOutgoingCommand(rawText, state.me?.username || 'ben');
+      await send({ content: transformed, replyToId: replyId });
     } catch (err) {
       toast('İşlem başarısız: ' + trErr(err));
-    } finally {
-      busy = false;
-      input.focus();
     }
   }
 

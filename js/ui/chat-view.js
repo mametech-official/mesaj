@@ -43,6 +43,7 @@ let unseen = 0;
 
 let starredSet = new Set();
 let reactionsMap = new Map();
+const chatCache = new Map(); // chatId -> { messages: [], hasMore: false }
 
 const box = () => $('messages');
 const nearBottom = () => { const b = box(); return b.scrollHeight - b.scrollTop - b.clientHeight < 140; };
@@ -132,7 +133,7 @@ export function initChatView() {
     const target = loaded.find(m => m.id === messageId);
     if (target) {
       target.content = content;
-      renderAll();
+      refreshSingleMessage(messageId);
     }
   });
   bus.on('reaction:change', onRealtimeReaction);
@@ -458,9 +459,7 @@ export async function openChat(chat) {
   $('empty-state').hidden = true;
   const view = $('chat-view');
   view.hidden = false;
-  view.classList.remove('enter'); void view.offsetWidth; view.classList.add('enter');
   $('app').classList.add('chat-open');
-  box().replaceChildren(el('div', 'no-msg', 'Yükleniyor…'));
   bus.emit('chat:active');
 
   if (isSelf) {
@@ -479,37 +478,59 @@ export async function openChat(chat) {
     return;
   }
 
+  // Önbellekte varsa 0ms gecikmeyle anında ekrana çiz
+  const cached = chatCache.get(chat.id);
+  if (cached && cached.messages.length) {
+    loaded = [...cached.messages];
+    loadedIds = new Set(loaded.map((m) => m.id));
+    hasMore = cached.hasMore;
+    renderAll();
+    scrollToBottom();
+  } else {
+    box().replaceChildren(el('div', 'no-msg', 'Yükleniyor…'));
+  }
+
   try {
     const rows = await fetchMessages(state.me.id, chat.id);
     if (my !== token) return;
     loaded = rows;
     loadedIds = new Set(rows.map((m) => m.id));
     hasMore = rows.length === CONFIG.PAGE_SIZE;
-
-    if (rows.length) {
-      const [reacs, stars] = await Promise.all([
-        fetchReactions(rows.map(m => m.id)).catch(() => []),
-        fetchStarred(chat.id).catch(() => []),
-      ]);
-      if (my === token) {
-        reacs.forEach(r => {
-          const arr = reactionsMap.get(r.message_id) || [];
-          arr.push(r);
-          reactionsMap.set(r.message_id, arr);
-        });
-        stars.forEach(s => starredSet.add(s.message_id));
-      }
-    }
+    chatCache.set(chat.id, { messages: [...rows], hasMore });
 
     renderAll();
     scrollToBottom();
     updateSmartReplies();
     if (window.matchMedia('(min-width: 761px)').matches) composer.focus();
-    await markRead(chat.id);
-    if (my === token) scheduleChatsRefresh();
+
+    // Tepkiler, yıldızlar ve okundu bilgisi arka planda bloklamadan yüklensin
+    if (rows.length) {
+      Promise.all([
+        fetchReactions(rows.map(m => m.id)).catch(() => []),
+        fetchStarred(chat.id).catch(() => []),
+      ]).then(([reacs, stars]) => {
+        if (my !== token) return;
+        const touchedIds = new Set();
+        reacs.forEach(r => {
+          const arr = reactionsMap.get(r.message_id) || [];
+          arr.push(r);
+          reactionsMap.set(r.message_id, arr);
+          touchedIds.add(r.message_id);
+        });
+        stars.forEach(s => {
+          starredSet.add(s.message_id);
+          touchedIds.add(s.message_id);
+        });
+        touchedIds.forEach(id => refreshSingleMessage(id));
+      });
+    }
+
+    markRead(chat.id).then(() => {
+      if (my === token) scheduleChatsRefresh();
+    }).catch(() => {});
   } catch (err) {
     if (my !== token) return;
-    box().replaceChildren(el('div', 'no-msg', 'Mesajlar yüklenemedi.'));
+    if (!loaded.length) box().replaceChildren(el('div', 'no-msg', 'Mesajlar yüklenemedi.'));
     toast(trErr(err));
   }
 }
@@ -711,12 +732,27 @@ function renderAll() {
     return;
   }
   let prev = null;
+  const frag = document.createDocumentFragment();
   for (const m of loaded) {
-    if (!prev || !sameDay(prev.created_at, m.created_at)) b.append(el('div', 'day-sep', fmtDayLabel(m.created_at)));
-    b.append(createMessageElement(m, prev, false));
+    if (!prev || !sameDay(prev.created_at, m.created_at)) frag.append(el('div', 'day-sep', fmtDayLabel(m.created_at)));
+    frag.append(createMessageElement(m, prev, false));
     prev = m;
   }
+  b.append(frag);
   renderTypingBubble();
+}
+
+function refreshSingleMessage(messageId) {
+  const idx = loaded.findIndex((x) => x.id === messageId);
+  if (idx === -1) return;
+  const oldRow = box().querySelector(`.msg-row[data-id="${messageId}"]`);
+  if (!oldRow) {
+    renderAll();
+    return;
+  }
+  const prev = idx > 0 ? loaded[idx - 1] : null;
+  const newRow = createMessageElement(loaded[idx], prev, false);
+  oldRow.replaceWith(newRow);
 }
 
 function createMessageElement(m, prev, animate) {
@@ -734,23 +770,20 @@ function createMessageElement(m, prev, animate) {
     onPin: (msg) => pinMessage(msg),
     onUpdateRichWidget: async (msg, newContent) => {
       msg.content = newContent;
-      renderAll();
+      refreshSingleMessage(msg.id);
       if (state.activeChat?.isSelf) {
         saveSelfNotes();
         return;
       }
-      // Odaya canlı broadcast yayınla (karşı taraf anında gecikmesiz güncellensin)
       sendCollabBroadcast('widget-update', {
         messageId: msg.id,
         content: newContent,
         from: state.me?.username,
       });
 
-      // Veritabanına kaydet
       try {
         await editMessage(msg.id, newContent);
       } catch (err) {
-        // Alıcı RLS engeline takılırsa mesaj sahibinden DB'ye yazmasını iste
         sendCollabBroadcast('widget-persist-request', {
           messageId: msg.id,
           content: newContent,
@@ -768,7 +801,7 @@ function createMessageElement(m, prev, animate) {
       try {
         await deleteMessageForEveryone(msg.id);
         msg.is_deleted = true;
-        renderAll();
+        refreshSingleMessage(msg.id);
       } catch (err) {
         toast('Silinemedi: ' + trErr(err));
       }
@@ -776,8 +809,10 @@ function createMessageElement(m, prev, animate) {
     onDeleteLocal: (msg) => {
       loaded = loaded.filter(x => x.id !== msg.id);
       loadedIds.delete(msg.id);
+      const oldRow = box().querySelector(`.msg-row[data-id="${msg.id}"]`);
+      if (oldRow) oldRow.remove();
+      else renderAll();
       if (state.activeChat?.isSelf) saveSelfNotes();
-      renderAll();
     },
     onReact: async (msg, emoji) => {
       const meId = state.me?.id;
@@ -785,43 +820,37 @@ function createMessageElement(m, prev, animate) {
         let list = reactionsMap.get(msg.id) || [];
         const existingMine = list.find(r => r.user_id === meId);
         if (existingMine && existingMine.emoji === emoji) {
-          // Aynı emojiye basıldı -> Kaldır
           list = list.filter(r => !(r.user_id === meId && r.emoji === emoji));
         } else {
-          // Farklı emoji -> Eski tepkimi sil, yenisini ekle (Tek çeşit kuralı)
           list = list.filter(r => r.user_id !== meId);
           list.push({ user_id: meId, emoji, created_at: new Date().toISOString() });
         }
         reactionsMap.set(msg.id, list);
         saveSelfNotes();
-        renderAll();
+        refreshSingleMessage(msg.id);
         return;
       }
       try {
-        // Optimistic UI: Kullanıcı tekil tepkisini anında ekrana yansıt
         let currentList = reactionsMap.get(msg.id) || [];
         const mineExisting = currentList.find(r => r.user_id === meId);
         if (mineExisting && mineExisting.emoji === emoji) {
-          // Aynı emojiye basıldı -> Kaldır
           currentList = currentList.filter(r => !(r.user_id === meId && r.emoji === emoji));
         } else {
-          // Farklı emoji -> Eski tepkilerimi kaldır, sadece yeni tekil olanı koy
           currentList = currentList.filter(r => r.user_id !== meId);
           currentList.push({ user_id: meId, emoji, created_at: new Date().toISOString() });
         }
         reactionsMap.set(msg.id, currentList);
-        renderAll();
+        refreshSingleMessage(msg.id);
 
-        // Veritabanını güncelle ve doğrula
         await toggleReaction(msg.id, emoji);
         const reacs = await fetchReactions([msg.id]);
         reactionsMap.set(msg.id, reacs);
-        renderAll();
+        refreshSingleMessage(msg.id);
       } catch (err) {
         toast('Tepki eklenemedi: ' + trErr(err));
         const reacs = await fetchReactions([msg.id]).catch(() => []);
         reactionsMap.set(msg.id, reacs);
-        renderAll();
+        refreshSingleMessage(msg.id);
       }
     },
     onStar: async (msg) => {
@@ -829,14 +858,14 @@ function createMessageElement(m, prev, animate) {
         if (state.activeChat?.isSelf) {
           if (starredSet.has(msg.id)) starredSet.delete(msg.id);
           else starredSet.add(msg.id);
-          renderAll();
+          refreshSingleMessage(msg.id);
           return;
         }
         const res = await toggleStar(msg.id);
         if (res) starredSet.add(msg.id);
         else starredSet.delete(msg.id);
         toast(res ? 'Mesaj yıldızlandı ⭐' : 'Yıldız kaldırıldı');
-        renderAll();
+        refreshSingleMessage(msg.id);
       } catch (err) {
         toast('Yıldızlanamadı: ' + trErr(err));
       }
@@ -950,6 +979,7 @@ function setUnseen(n) {
  * ===================================================================== */
 async function sendPayload(payload) {
   if (!state.activeChat) return;
+  const targetChatId = state.activeChat.id;
   if (state.activeChat.isSelf) {
     const fakeMsg = {
       id: 'self_' + Date.now(),
@@ -964,7 +994,51 @@ async function sendPayload(payload) {
     saveSelfNotes();
     return;
   }
-  await sendMessage({ me: state.me, to: state.activeChat.id, ...payload });
+
+  // Metin mesajlarını 0ms gecikmeyle (Optimistic UI) anında ekrana çiz
+  let optId = null;
+  if (payload.content && !payload.image && !payload.audio && !payload.video && !payload.document) {
+    optId = 'opt_' + Date.now() + '_' + Math.random().toString(36).slice(2, 7);
+    const optMsg = {
+      id: optId,
+      sender_id: state.me.id,
+      receiver_id: targetChatId,
+      content: payload.content.trim(),
+      reply_to_id: payload.replyToId || null,
+      created_at: new Date().toISOString(),
+      media_type: 'text',
+    };
+    appendMessage(optMsg);
+  }
+
+  try {
+    const saved = await sendMessage({ me: state.me, to: targetChatId, ...payload });
+    if (saved && optId) {
+      loadedIds.delete(optId);
+      loadedIds.add(saved.id);
+      const idx = loaded.findIndex((m) => m.id === optId);
+      if (idx !== -1) loaded[idx] = saved;
+      const row = box().querySelector(`.msg-row[data-id="${optId}"]`);
+      if (row) {
+        row.dataset.id = saved.id;
+        updateRowTick(row, saved);
+      }
+      if (state.activeChat && state.activeChat.id === targetChatId) {
+        chatCache.set(targetChatId, { messages: [...loaded], hasMore });
+      }
+    } else if (saved && state.activeChat && state.activeChat.id === targetChatId) {
+      appendMessage(saved);
+      chatCache.set(targetChatId, { messages: [...loaded], hasMore });
+    }
+  } catch (err) {
+    if (optId) {
+      loaded = loaded.filter((m) => m.id !== optId);
+      loadedIds.delete(optId);
+      const row = box().querySelector(`.msg-row[data-id="${optId}"]`);
+      if (row) row.remove();
+    }
+    throw err;
+  }
 }
 
 function previewImage(file) {
@@ -1007,13 +1081,13 @@ async function handleEditMessage(m, newText) {
     m.content = newText;
     m.edited_at = new Date().toISOString();
     saveSelfNotes();
-    renderAll();
+    refreshSingleMessage(m.id);
     return;
   }
   await editMessage(m.id, newText);
   m.content = newText;
   m.edited_at = new Date().toISOString();
-  renderAll();
+  refreshSingleMessage(m.id);
   toast('Mesaj düzenlendi.');
 }
 
@@ -1024,11 +1098,30 @@ function onRealtimeInsert(m) {
   const isCurrentChat = state.activeChat && (m.sender_id === state.activeChat.id || m.receiver_id === state.activeChat.id);
 
   if (isCurrentChat) {
-    appendMessage(m);
+    // Eğer bizim gönderdiğimiz mesajın optimistic kopyası henüz id güncellemediyse eşleştir
+    if (m.sender_id === state.me.id && !loadedIds.has(m.id)) {
+      const optIdx = loaded.findIndex((x) => String(x.id).startsWith('opt_') && x.content === m.content);
+      if (optIdx !== -1) {
+        const oldOptId = loaded[optIdx].id;
+        loadedIds.delete(oldOptId);
+        loadedIds.add(m.id);
+        loaded[optIdx] = m;
+        const row = box().querySelector(`.msg-row[data-id="${oldOptId}"]`);
+        if (row) {
+          row.dataset.id = m.id;
+          updateRowTick(row, m);
+        }
+      } else {
+        appendMessage(m);
+      }
+    } else {
+      appendMessage(m);
+    }
+    chatCache.set(state.activeChat.id, { messages: [...loaded], hasMore });
+
     if (m.sender_id === state.activeChat.id) {
       markRead(state.activeChat.id);
       playFxSound('in');
-      checkAndTriggerCelebration(m.content);
     }
   } else if (m.receiver_id === state.me.id) {
     playFxSound('in');
@@ -1062,7 +1155,7 @@ function onRealtimeUpdate(m) {
   }
 
   if (m.is_deleted || m.edited_at) {
-    renderAll();
+    refreshSingleMessage(m.id);
   } else if (row) {
     updateRowTick(row, m);
   }
@@ -1072,7 +1165,7 @@ function onRealtimeReaction(r) {
   if (!r || !r.message_id) return;
   fetchReactions([r.message_id]).then(list => {
     reactionsMap.set(r.message_id, list);
-    renderAll();
+    refreshSingleMessage(r.message_id);
   });
 }
 
@@ -1080,7 +1173,7 @@ function onRealtimeStar() {
   if (state.activeChat && !state.activeChat.isSelf) {
     fetchStarred(state.activeChat.id).then(list => {
       starredSet = new Set(list.map(s => s.message_id));
-      renderAll();
+      loaded.forEach((m) => refreshSingleMessage(m.id));
     });
   }
 }
