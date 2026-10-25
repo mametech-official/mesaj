@@ -4,34 +4,38 @@
 :root {
   --bg-deep: #070d12;
   --bg-panel: #0e171f;
-  --bg-panel-glass: #0e171f;
-  --bg-head: #131f29;
-  --bg-hover: #1c2b38;
-  --bg-active: rgba(0, 168, 132, 0.16);
-  --bg-input: #182530;
+  --bg-panel-glass: rgba(14, 23, 31, 0.78);
+  --bg-head: rgba(24, 36, 46, 0.75);
+  --bg-hover: rgba(34, 49, 62, 0.65);
+  --bg-active: rgba(0, 168, 132, 0.14);
+  --bg-input: rgba(26, 39, 49, 0.85);
   --bubble-out: #005c4b;
-  --bubble-out-grad: #005c4b;
-  --bubble-in: #1b2834;
+  --bubble-out-grad: linear-gradient(135deg, #00755e 0%, #004f40 100%);
+  --bubble-in: rgba(29, 42, 52, 0.88);
   --accent: #00a884;
   --accent-hover: #00c49a;
   --accent-bright: #00e5b3;
-  --accent-glow: rgba(0, 168, 132, 0.25);
+  --accent-glow: rgba(0, 168, 132, 0.35);
   --online: #25d366;
   --tick-read: #53bdeb;
   --text: #eef2f5;
   --text-sub: #8fa1ad;
   --text-dim: #667781;
-  --border: rgba(255, 255, 255, 0.08);
-  --border-highlight: rgba(255, 255, 255, 0.14);
+  --border: rgba(255, 255, 255, 0.07);
+  --border-highlight: rgba(255, 255, 255, 0.12);
   --danger: #f15c6d;
-  --doodle-opacity: 0.12;
+  --doodle-opacity: 0.18;
   --doodle: url("../assets/doodle.svg");
-  --chat-bg-gradient: #091117;
+  --chat-bg-gradient:
+    radial-gradient(circle at 16% 18%, rgba(0, 168, 132, 0.18) 0%, transparent 48%),
+    radial-gradient(circle at 84% 82%, rgba(83, 189, 235, 0.13) 0%, transparent 52%),
+    radial-gradient(circle at 52% 48%, rgba(0, 92, 75, 0.10) 0%, transparent 65%),
+    linear-gradient(160deg, #070e13 0%, #0c161e 50%, #070d12 100%);
   --radius-sm: 10px;
   --radius-md: 14px;
   --radius-lg: 20px;
-  --shadow-soft: 0 4px 14px rgba(0, 0, 0, 0.3);
-  --shadow-elevated: 0 8px 24px rgba(0, 0, 0, 0.45);
+  --shadow-soft: 0 8px 30px rgba(0, 0, 0, 0.38);
+  --shadow-elevated: 0 18px 48px rgba(0, 0, 0, 0.55);
   --ease: cubic-bezier(0.22, 1, 0.36, 1);
 }
 

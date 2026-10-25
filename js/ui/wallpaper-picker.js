@@ -261,8 +261,50 @@ function hexToRgba(hex, alpha) {
  * Tema veya renk değiştiğinde sağdan sola kıvrılarak ilerleyen
  * gerçek sinüzoidal sıvı dalga (View Transition + 60fps Canvas Dalga) geçişi üretir.
  */
-export function triggerThemeWave(applyMutation) {
+export function triggerThemeWave(applyMutation, primaryColor = '#00e5b3', opts = {}) {
+  if (opts && opts.silent) {
+    applyMutation();
+    return;
+  }
+
+  const secondaryColor = opts?.secondaryColor || '#38bdf8';
+  const duration = 1050;
+  ensureWaveCanvas();
+
+  const canViewTransition =
+    typeof document.startViewTransition === 'function' &&
+    !window.matchMedia('(prefers-reduced-motion: reduce)').matches;
+
+  if (canViewTransition) {
+    try {
+      const w = window.innerWidth;
+      const h = window.innerHeight;
+      const keyframes = buildWavyPolygonKeyframes(w, h);
+
+      const transition = document.startViewTransition(() => {
+        applyMutation();
+      });
+
+      startCanvasLiquidWaves(primaryColor, secondaryColor, duration);
+
+      transition.ready.then(() => {
+        document.documentElement.animate(keyframes, {
+          duration,
+          easing: 'linear',
+          pseudoElement: '::view-transition-new(root)',
+        });
+      }).catch(() => {});
+      return;
+    } catch {}
+  }
+
+  // Fallback
+  document.documentElement.classList.add('theme-smooth-morph');
   applyMutation();
+  startCanvasLiquidWaves(primaryColor, secondaryColor, duration);
+  setTimeout(() => {
+    document.documentElement.classList.remove('theme-smooth-morph');
+  }, duration);
 }
 
 export function getCurrentTheme() {
