@@ -75,7 +75,19 @@
 
 /* Profil resmi yükleme kaplaması */
 .me-avatar-wrap {
+  position: relative;
+  width: 42px;
+  height: 42px;
+  border-radius: 50%;
+  flex-shrink: 0;
   cursor: pointer;
+}
+.me-avatar-wrap .avatar {
+  width: 42px !important;
+  height: 42px !important;
+  border-radius: 50% !important;
+  overflow: hidden !important;
+  position: relative !important;
 }
 .me-avatar-wrap .avatar-overlay {
   position: absolute;

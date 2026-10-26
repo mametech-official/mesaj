@@ -33,7 +33,7 @@ export function debounce(fn, ms) {
   return d;
 }
 
-/* ---------- Avatar & Akıllı Ekran Görüntüsü / Kenar Boşluğu Kırpma (centerCrop) ---------- */
+/* ---------- Avatar & Temiz 1:1 Kare Kırpma (centerCrop) ---------- */
 export function hashString(str) {
   let h = 2166136261;
   for (let i = 0; i < str.length; i++) { h ^= str.charCodeAt(i); h = Math.imul(h, 16777619); }
@@ -49,119 +49,12 @@ export function seededRandom(seed) {          // mulberry32
   };
 }
 
-const avatarCropCache = new Map();
-
-/**
- * Bir görselde telefon ekran görüntüsü kaynaklı üst/alt/yan siyah veya düz renk
- * boşlukları (letterbox) tespit edip yuvarlak alanı %100 dolduracak centerCrop ölçeğini hesaplar.
- */
-function analyzeAvatarLetterbox(imgEl, url) {
-  if (avatarCropCache.has(url)) return avatarCropCache.get(url);
-
-  const nw = imgEl.naturalWidth || 0;
-  const nh = imgEl.naturalHeight || 0;
-  if (!nw || !nh) return null;
-
-  let scale = 1.04;
-  let posX = 50;
-  let posY = 50;
-
-  // Dikey veya yatay telefon ekran görüntüsü oranı tespiti (örn. 9:16, 9:20)
-  const ratio = Math.max(nw / nh, nh / nw);
-  if (ratio > 1.32) {
-    // Ekran görüntüsü içindeki yatay/kare fotoğrafın yuvarlak çerçeveyi tam doldurması için:
-    scale = Math.min(2.25, Math.max(1.48, ratio * 0.92));
-  }
-
-  // Offscreen canvas ile piksel bazlı üst/alt/sol/sağ boşluk (letterbox) taraması
-  try {
-    const S = 64;
-    const cv = document.createElement('canvas');
-    cv.width = S;
-    cv.height = S;
-    const ctx = cv.getContext('2d', { willReadFrequently: true });
-    // object-fit: cover simülasyonu ile 64x64 merkeze çiz
-    const sRatio = Math.max(S / nw, S / nh);
-    const dw = nw * sRatio;
-    const dh = nh * sRatio;
-    const dx = (S - dw) / 2;
-    const dy = (S - dh) / 2;
-    ctx.drawImage(imgEl, dx, dy, dw, dh);
-
-    const data = ctx.getImageData(0, 0, S, S).data;
-    const isRowUniformBorder = (y) => {
-      let r0 = data[(y * S + 8) * 4];
-      let g0 = data[(y * S + 8) * 4 + 1];
-      let b0 = data[(y * S + 8) * 4 + 2];
-      let diffSum = 0;
-      let count = 0;
-      for (let x = 8; x < S - 8; x += 2) {
-        const idx = (y * S + x) * 4;
-        const r = data[idx], g = data[idx + 1], b = data[idx + 2];
-        diffSum += Math.abs(r - r0) + Math.abs(g - g0) + Math.abs(b - b0);
-        count++;
-      }
-      const avgDiff = diffSum / Math.max(1, count);
-      const lum = (r0 + g0 + b0) / 3;
-      // Çok koyu (siyah bar), çok açık (beyaz bar) veya tamamen tek renk şerit
-      return avgDiff < 18 || lum < 22 || lum > 242;
-    };
-
-    const isColUniformBorder = (x) => {
-      let r0 = data[(8 * S + x) * 4];
-      let g0 = data[(8 * S + x) * 4 + 1];
-      let b0 = data[(8 * S + x) * 4 + 2];
-      let diffSum = 0;
-      let count = 0;
-      for (let y = 8; y < S - 8; y += 2) {
-        const idx = (y * S + x) * 4;
-        const r = data[idx], g = data[idx + 1], b = data[idx + 2];
-        diffSum += Math.abs(r - r0) + Math.abs(g - g0) + Math.abs(b - b0);
-        count++;
-      }
-      const avgDiff = diffSum / Math.max(1, count);
-      const lum = (r0 + g0 + b0) / 3;
-      return avgDiff < 18 || lum < 22 || lum > 242;
-    };
-
-    let top = 0;
-    while (top < 24 && isRowUniformBorder(top)) top++;
-    let bottom = S - 1;
-    while (bottom > S - 25 && isRowUniformBorder(bottom)) bottom--;
-
-    let left = 0;
-    while (left < 24 && isColUniformBorder(left)) left++;
-    let right = S - 1;
-    while (right > S - 25 && isColUniformBorder(right)) right--;
-
-    const activeH = Math.max(18, bottom - top + 1);
-    const activeW = Math.max(18, right - left + 1);
-
-    if (top > 2 || (S - 1 - bottom) > 2 || left > 2 || (S - 1 - right) > 2) {
-      const neededScaleY = (S / activeH) * 1.12;
-      const neededScaleX = (S / activeW) * 1.12;
-      scale = Math.min(2.8, Math.max(scale, neededScaleY, neededScaleX));
-      posY = Math.round(((top + bottom) / 2 / S) * 100);
-      posX = Math.round(((left + right) / 2 / S) * 100);
-    }
-  } catch {
-    // CORS kısıtlıysa oran tabanlı centerCrop ölçeği devrede kalır
-  }
-
-  const res = { scale: Number(scale.toFixed(2)), posX, posY };
-  avatarCropCache.set(url, res);
-  return res;
-}
-
 export function setAvatar(node, name, avatarUrl = null) {
   if (!node) return;
   const n = name || '?';
   if (avatarUrl) {
     node.textContent = '';
-    node.style.backgroundImage = `url("${avatarUrl}")`;
-    node.style.backgroundSize = 'cover';
-    node.style.backgroundPosition = 'center center';
-    node.style.backgroundRepeat = 'no-repeat';
+    node.style.backgroundImage = 'none';
     node.style.backgroundColor = '#182530';
     node.classList.add('has-img');
 
@@ -174,29 +67,16 @@ export function setAvatar(node, name, avatarUrl = null) {
       node.appendChild(img);
     }
 
-    const applyCrop = (crop) => {
-      if (!crop) return;
-      img.style.objectPosition = `${crop.posX}% ${crop.posY}%`;
-      img.style.transform = `scale(${crop.scale})`;
-    };
-
-    const cached = avatarCropCache.get(avatarUrl);
-    if (cached) applyCrop(cached);
+    img.style.transform = 'none';
+    img.style.objectFit = 'cover';
+    img.style.objectPosition = 'center center';
+    img.style.width = '100%';
+    img.style.height = '100%';
+    img.style.borderRadius = '50%';
+    img.style.display = 'block';
 
     if (img.dataset.src !== avatarUrl) {
       img.dataset.src = avatarUrl;
-      img.crossOrigin = 'anonymous';
-      img.onload = () => {
-        const crop = analyzeAvatarLetterbox(img, avatarUrl);
-        applyCrop(crop);
-      };
-      img.onerror = () => {
-        // Eğer crossOrigin desteklenmiyorsa normal modda yeniden yükle
-        if (img.crossOrigin) {
-          img.removeAttribute('crossorigin');
-          img.src = avatarUrl;
-        }
-      };
       img.src = avatarUrl;
     }
   } else {
@@ -209,7 +89,7 @@ export function setAvatar(node, name, avatarUrl = null) {
 }
 
 /**
- * Yüklenen profil fotoğrafını 512x512 kareye centerCrop yapar ve kenar boşluklarını temizler.
+ * Yüklenen profil fotoğrafını 512x512 kareye centerCrop yapar (asla büyütüp taşırmaz).
  */
 export async function centerCropAvatarFile(file) {
   if (!file) return file;
@@ -226,19 +106,17 @@ export async function centerCropAvatarFile(file) {
         cv.height = OUT;
         const ctx = cv.getContext('2d');
 
-        const crop = analyzeAvatarLetterbox(img, url) || { scale: 1, posX: 50, posY: 50 };
-        const baseScale = Math.max(OUT / nw, OUT / nh) * (crop.scale || 1);
-        const dw = nw * baseScale;
-        const dh = nh * baseScale;
-        const dx = (OUT - dw) * (crop.posX / 100);
-        const dy = (OUT - dh) * (crop.posY / 100);
+        // Merkeze göre tam kare (1:1) kırpma:
+        const side = Math.min(nw, nh);
+        const sx = (nw - side) / 2;
+        const sy = (nh - side) / 2;
 
-        ctx.drawImage(img, dx, dy, dw, dh);
+        ctx.drawImage(img, sx, sy, side, side, 0, 0, OUT, OUT);
         URL.revokeObjectURL(url);
         cv.toBlob((blob) => {
           if (!blob) { resolve(file); return; }
           resolve(new File([blob], 'avatar.jpg', { type: 'image/jpeg' }));
-        }, 'image/jpeg', 0.9);
+        }, 'image/jpeg', 0.92);
       } catch {
         URL.revokeObjectURL(url);
         resolve(file);
